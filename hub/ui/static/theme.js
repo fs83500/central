@@ -19,7 +19,7 @@ function setTheme(mode, persist) {
   applyTheme(mode);
   try { localStorage.setItem('ug-theme', mode); } catch { /* private mode */ }
   if (persist) {
-    fetch('/api/v1/me/theme', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ theme: mode }) }).catch(() => {});
+    fetch('api/v1/me/theme', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ theme: mode }) }).catch(() => {});
   }
 }
 

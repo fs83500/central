@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hôte — UnifiedGuard</title>
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="static/app.css">
 <script>/* anti-FOUC: apply saved theme before first paint */try{var t=localStorage.getItem('ug-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
 <body>
@@ -17,15 +17,15 @@
     <button type="button" data-set-theme="dark" title="Thème sombre">☾</button>
   </div>
   <div class="user" id="user"></div>
-  <a class="btn small sec" href="/logout" id="logout" style="color:var(--ink)">Déconnexion</a>
+  <a class="btn small sec" href="logout" id="logout" style="color:var(--ink)">Déconnexion</a>
 </div>
 <div class="shell">
   <div class="sidenav">
     <div class="grp">Surveillance</div>
-    <a href="/hosts">← Hôtes</a>
+    <a href="hosts">← Hôtes</a>
     <a class="on" href="#" id="nav-host">Cet hôte</a>
     <div class="grp">Journal</div>
-    <a href="/audit">Audit</a>
+    <a href="audit">Audit</a>
   </div>
   <div class="main">
     <h1 id="hostname">…</h1>
@@ -66,14 +66,16 @@
     </div>
   </div>
 </div>
-<script src="/static/theme.js"></script>
+<script src="static/theme.js"></script>
 <script>
 'use strict';
 initTheme();
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// path = /hosts/<uuid>
-const hostID = location.pathname.split('/')[2];
+// Host id from the query param (?id=<uuid>) — the page is served at
+// /hosts?id=… so the relative-asset trick works behind any proxy prefix
+// (sandbox preview, Caddy…) as well as at the root in production.
+const hostID = new URLSearchParams(location.search).get('id');
 
 function sparkSVG(points, w, h, color) {
   if (!points.length) return `<p class="sub">Pas encore de télémétrie.</p>`;
@@ -100,8 +102,8 @@ function fmtUptime(s) {
 }
 
 async function refresh() {
-  const r = await fetch('/api/v1/hosts/' + hostID);
-  if (r.status === 401) { location.href = '/login'; return; }
+  const r = await fetch('api/v1/hosts/' + hostID);
+  if (r.status === 401) { location.href = 'login'; return; }
   const h = await r.json();
   document.getElementById('site').textContent = h.domain || '';
   document.getElementById('hostname').textContent = h.hostname;
@@ -125,7 +127,7 @@ async function refresh() {
   document.getElementById('arows').innerHTML = (h.audit || []).map((a) => `
     <tr><td class="mono">${a.seq}</td><td class="mono">${esc(a.ts)}</td><td class="mono">${esc(a.actor)}</td><td>${esc(a.action)}</td>
     <td><span class="chip ${a.result === 'ok' ? 'ok' : 'crit'}">${esc(a.result)}</span></td><td class="mono">${esc((a.hash || '').slice(0, 12))}…</td></tr>`).join('');
-  const u = await fetch('/api/v1/me').then((r) => r.json());
+  const u = await fetch('api/v1/me').then((r) => r.json());
   document.getElementById('user').textContent = u.email + ' · ' + u.role;
   initThemeFromServer(u.theme);
 }

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"git.dpnac.cloud/dpnac/central/hub/auth"
@@ -85,6 +86,23 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+
+	// Dev preview helper: the sandbox preview proxy may forward the request
+	// with its /preview/<agent>/<port>/ prefix intact. The dashboard UI uses
+	// relative paths only, so this middleware simply strips that prefix when
+	// present — HUB_UI_PREFIX is empty in production (Caddy strips it).
+	uiPrefix := getenv("HUB_UI_PREFIX", "")
+	var root http.Handler = mux
+	if uiPrefix != "" {
+		p := strings.TrimSuffix(uiPrefix, "/")
+		root = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, p+"/") {
+				r.URL.Path = strings.TrimPrefix(r.URL.Path, p)
+			}
+			mux.ServeHTTP(w, r)
+		})
+	}
+
 	mux.HandleFunc("GET /api/v1/ping", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "version": version.String(), "hash": version.SelfHash()})
 	})
@@ -135,11 +153,19 @@ func main() {
 	mux.Handle("GET /api/v1/audit/events", gate(srvHub.HandleAuditEvents))
 
 	mux.Handle("GET /login", ui.Page("login.html"))
-	mux.Handle("GET /hosts/{id}", gate(func(w http.ResponseWriter, r *http.Request) {
-		servePage(w, "host.html")
-	}))
 	mux.Handle("GET /hosts", gate(func(w http.ResponseWriter, r *http.Request) {
+		// ?id= → host detail. Query param keeps every page at depth 1 so
+		// relative assets/api paths work behind any proxy prefix.
+		if id := r.URL.Query().Get("id"); id != "" {
+			servePage(w, "host.html")
+			return
+		}
 		servePage(w, "hosts.html")
+	}))
+	// Legacy deep links /hosts/{id} → hosts?id= (relative redirect keeps
+	// any proxy prefix, e.g. the sandbox preview).
+	mux.Handle("GET /hosts/{id}", gate(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "../hosts?id="+r.PathValue("id"), http.StatusSeeOther)
 	}))
 	mux.Handle("GET /enroll", gate(func(w http.ResponseWriter, r *http.Request) {
 		servePage(w, "enroll.html")
@@ -148,7 +174,7 @@ func main() {
 		servePage(w, "audit.html")
 	}))
 	mux.Handle("GET /{$}", gate(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/hosts", http.StatusSeeOther)
+		http.Redirect(w, r, "hosts", http.StatusSeeOther)
 	}))
 
 	// Dev-only helper: create an enrollment token (the token is printed ONCE).
@@ -171,7 +197,7 @@ func main() {
 	// HTTP) so the UI is reachable through a sandbox preview proxy while the
 	// main listener keeps agent mTLS traffic. NEVER set in production.
 	if uiAddr := getenv("HUB_DEV_UI_LISTEN", ""); uiAddr != "" && dev {
-		uiSrv := &http.Server{Addr: uiAddr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+		uiSrv := &http.Server{Addr: uiAddr, Handler: root, ReadHeaderTimeout: 10 * time.Second}
 		go func() {
 			log.Printf("hub: dev UI (HTTP) listening on %s", uiAddr)
 			if err := uiSrv.ListenAndServe(); err != http.ErrServerClosed {
@@ -181,7 +207,7 @@ func main() {
 	}
 
 	httpSrv := &http.Server{
-		Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second,
+		Addr: addr, Handler: root, ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Printf("hub %s listening on %s (J2) — domain %s dev=%v", version.String(), addr, domain, dev)
 	// Optional TLS (dev/self-signed or behind no reverse proxy): enables the

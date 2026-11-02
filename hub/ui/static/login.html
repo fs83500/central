@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Connexion — UnifiedGuard</title>
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="static/app.css">
 <script>/* anti-FOUC: apply saved theme before first paint */try{var t=localStorage.getItem('ug-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
 <body>
@@ -31,7 +31,7 @@
     <button type="button" data-set-theme="dark"  title="Thème sombre">☾</button>
   </div>
 </div>
-<script src="/static/theme.js"></script>
+<script src="static/theme.js"></script>
 <script>
 'use strict';
 initTheme(); // apply saved theme before first paint of the picker state
@@ -63,7 +63,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     }
     return;
   }
-  if (status === 200 && data.ok) { location.href = '/hosts'; return; }
+  if (status === 200 && data.ok) { location.href = 'hosts'; return; }
   if (status === 429) { showErr('Trop de tentatives — réessayez plus tard.'); return; }
   showErr(data.error || 'Identifiants invalides.');
 });
@@ -75,7 +75,7 @@ document.getElementById('mfa-form').addEventListener('submit', async (e) => {
     email: document.getElementById('email').value,
     code: document.getElementById('code').value,
   });
-  if (status === 200 && data.ok) { location.href = '/hosts'; return; }
+  if (status === 200 && data.ok) { location.href = 'hosts'; return; }
   showErr(data.error || 'Code invalide ou expiré.');
 });
 </script>

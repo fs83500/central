@@ -127,7 +127,7 @@ func (s *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		_, _ = s.DB.Exec(`UPDATE hub_sessions SET revoked_at = now() WHERE token_hash = $1`, auth.HashToken(c.Value))
 	}
 	auth.ClearSessionCookie(s.DB.SQL, w, r)
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, "login", http.StatusSeeOther)
 }
 
 // HandleMe returns the session user (email, role, theme).

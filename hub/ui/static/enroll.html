@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Enrollment — UnifiedGuard</title>
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="static/app.css">
 <script>/* anti-FOUC: apply saved theme before first paint */try{var t=localStorage.getItem('ug-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
 <body>
@@ -17,15 +17,15 @@
     <button type="button" data-set-theme="dark" title="Thème sombre">☾</button>
   </div>
   <div class="user" id="user"></div>
-  <a class="btn small sec" href="/logout" id="logout" style="color:var(--ink)">Déconnexion</a>
+  <a class="btn small sec" href="logout" id="logout" style="color:var(--ink)">Déconnexion</a>
 </div>
 <div class="shell">
   <div class="sidenav">
     <div class="grp">Surveillance</div>
-    <a href="/hosts">Hôtes</a>
-    <a class="on" href="/enroll">Enrollment</a>
+    <a href="hosts">Hôtes</a>
+    <a class="on" href="enroll">Enrollment</a>
     <div class="grp">Journal</div>
-    <a href="/audit">Audit</a>
+    <a href="audit">Audit</a>
   </div>
   <div class="main">
     <h1>Enrollment</h1>
@@ -47,15 +47,15 @@
     </div>
   </div>
 </div>
-<script src="/static/theme.js"></script>
+<script src="static/theme.js"></script>
 <script>
 'use strict';
 initTheme();
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 document.getElementById('create').addEventListener('click', async () => {
-  const r = await fetch('/api/v1/enroll/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: document.getElementById('label').value || '' }) });
-  if (r.status === 401) { location.href = '/login'; return; }
+  const r = await fetch('api/v1/enroll/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: document.getElementById('label').value || '' }) });
+  if (r.status === 401) { location.href = 'login'; return; }
   const data = await r.json();
   const tok = document.getElementById('tok');
   tok.hidden = false;
@@ -68,7 +68,7 @@ document.getElementById('copy').addEventListener('click', async () => {
 });
 
 (async () => {
-  const u = await fetch('/api/v1/me').then((r) => r.json());
+  const u = await fetch('api/v1/me').then((r) => r.json());
   document.getElementById('user').textContent = u.email + ' · ' + u.role;
   document.getElementById('site').textContent = location.host;
   initThemeFromServer(u.theme);
