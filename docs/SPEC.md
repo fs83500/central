@@ -396,16 +396,44 @@ Schéma hybride (enveloppe) :
 
 ## 7. Abonnements (offres)
 
-| Offre | Devices | Cible |
-|---|---|---|
-| Starter | 5 | très petits sites |
-| Bronze | 25 | TPE/PME |
-| Silver | 50 | PME |
-| Gold | 100 | PME+ |
-| Platinum | 250 | ETI / multi-équipes |
+### 7.1 Grille (proposition 02/11, B2B HT, par centrale)
+
+| Offre | Devices | €/mois | €/an (−17 %) | €/device/mois | Cible |
+|---|---|---|---|---|---|
+| Starter | 5 | 15 € | 150 € | 3,00 € | très petits sites (produit d'appel) |
+| Bronze | 25 | 45 € | 450 € | 1,80 € | TPE/PME |
+| Silver | 50 | 80 € | 800 € | 1,60 € | PME |
+| Gold | 100 | 140 € | 1 400 € | 1,40 € | PME+ |
+| Platinum | 250 | 300 € | 3 000 € | 1,20 € | ETI / multi-équipes |
+| Entreprise | >250 / multi-centrales | sur devis | — | ~1 € | ETI multi-sites |
+
+Positionnement (02/11) : grille volontairement **sous les RMM SaaS** (JumpCloud
+~9 €/utilisateur, Atera ~2-3 €/device) mais payante face aux outils gratuits
+(Tactical RMM, MeshCentral) grâce à la valeur sécurité : audit chaîné, mTLS,
+sauvegarde FW chiffrée, rollback. Palier 5 devices = produit d'appel (15 €/mois
+pour qui ne paierait jamais Lansweeper/JumpCloud). Chaque centrale = 1 licence :
+un client multi-sites achète N licences → le multi-sites fait monter l'ARPU.
+
+Options facturables (02/11) :
+- **Module backup chiffré** (§11.5) : +20 % du plan (ex. Gold 140 → 168 €/mois).
+- **Support premium** (SLA 4 h, assistance config FW) : 500-1 500 €/an.
+- **Onboarding / installation initiale** : 300-500 € ponctuel.
 
 Le quota s'applique par centrale (hosts enrollés). Le suivi de quota vit sur la console
 globale, qui le pousse aux centrales. (Facturation hors périmètre technique pour l'instant.)
+
+### 7.2 CA réalisable (scénarios 02/11, mix de ventes pondéré petits > gros)
+
+| Horizon | Centrales actives | Mix exemple | CA mensuel | CA annuel |
+|---|---|---|---|---|
+| Année 1 — lancement | ~40 | 18 Starter + 12 Bronze + 6 Silver + 3 Gold + 1 Platinum | ~2 600 € | **25-35 k€** |
+| Année 2 — traction | ~120 | montée du mix (30 % Bronze, 30 % Silver, 20 % Gold) | ~9 000-11 000 € | **100-130 k€** |
+| Année 3 — scale | ~250-400 | dont ETI multi-centrales (10 % des clients ≈ 3 500-5 000 €/mois) | — | **300-500 k€** |
+
+Marge brute excellente : l'infra SaaS (console globale) coûte ~50-100 €/mois
+pour plusieurs centaines de clients — le vrai coût est le temps humain
+(commercial + support). Les concurrents gratuits plafonnent le prix ~2 €/device ;
+au-delà, il faut vendre du directory/identité (ce que fait JumpCloud).
 
 ## 8. Déploiement
 
