@@ -1,4 +1,4 @@
-# IDEES N1-N19 — développement détaillé (N1-N15 ✅ validées 02/11 · N16 ✅ « à terme » · N17-N19 ⏳ proposition 02/11, angle NIS2)
+# IDEES N1-N20 — développement détaillé (N1-N15 ✅ validées 02/11 · N16 ✅ « à terme » · N17-N19 ⏳ proposition 02/11, angle NIS2 · N20 ✅ validée 02/11)
 
 > Statut : 🔵 toutes proposées, aucune encore validée/refusée.
 > Légende effort : **S** = jours · **M** = 1-2 semaines · **L** = 2-4 semaines · **XL** = chantier majeur.
@@ -25,6 +25,7 @@
 | N15 | Suivi CVE par sévérité | Mapping paquets→CVE (feeds distro : Debian security-tracker, ALAS/ELSA, OVAL) ; badge criticité par MAJ ; vue « sécurité d'abord » : hosts avec vulnérabilités critiques en tête | Argument commercial n°1 d'un patch manager : montrer LE risque, pas 400 MAJs | L | P2 | Gestion paquets, source de données CVE |
 | N16 | Backup natif type UrBackup | Moteur de sauvegarde à CODER nativement dans l'agent (Go) : fichiers puis images disque, chunks CDC dédup (SHA-256) + zstd + AES-256-GCM, restauration fichier/bare-metal, réplication chiffrée centrale+glob (aucun ne peut lire sans la clé du site) | Vision complète patch + FW + backup sous UNE marque, UN seul agent à installer | M (B1) → XL (B4) | P3 (« à terme ») | Socle, canal mTLS, gestion paquets, clé de site |
 | N17 | Rapport de conformité NIS2 | Rapport 1 clic généré depuis l'audit chaîné : inventaire, % patching par sévérité CVE, hygiène FW (dérives N3, rollbacks), incidents, preuves crypto (signatures, self-hash), export PDF/JSON signé + horodaté | Le jour du contrôle, on PROUVE : piste infalsifiable + synthèse par mesure NIS2 ; module premium facturable | L | P1 (module premium NIS2) | N5 ✅, N15, N3, N13 |
+| N20 | Détection des conteneurs (Docker/Podman) | L'agent détecte les runtimes, les conteneurs, les ports publiés (flag 0.0.0.0) et les chaînes DOCKER/DOCKER-USER ; remonte tout dans heartbeat/inventaire ; l'UI montre la surface d'attaque ; règles FW conteneurs via DOCKER-USER | Docker CONTOURNE ufw/firewalld : « protégé par ufw » + port publié = trou béant sans que l'admin le sache ; finding de premier plan pour NIS2 | M | P1 (J4) | Agent inventaire ✅, agent FW (J4) |
 | N18 | Scoring par mesure NIS2 | Badge « conformité » par host/site : à jour / à surveiller / non conforme, calculé en continu sur patching, FW, agents, incidents ; visible dashboard + global | La démo « parle contrôle ANSSI », pas seulement des graphes ; ancre la marque conformité | M | P1 (avec N17) | N17, télémétrie |
 | N19 | Registre des dérogations | Toute MAJ non appliquée ou règle FW tolérée doit être justifiée (qui, pourquoi, échéance) ; registre consultable, alimente le rapport NIS2 ; alerte à l'échéance | Le registre NIS2 classique, sinon le rapport montre des trous inexpliqués | S-M | P1 (avec N17) | Gestion paquets, N3 |
 
@@ -162,12 +163,35 @@
 - **Phasage** : B1 fichiers Linux → B2 CDC/dédup/réplication chiffrée → B3 Windows VSS + web
   → B4 images disque + bare-metal. À traiter comme un PROJET DISTINCT (repo `backup`).
 
+### N20 · Détection des conteneurs — Docker & Podman (✅ validée 02/11)
+- **Fonctionnement** : l'agent identifie les runtimes actifs (docker/podman, compose,
+  containerd, k8s à part), énumère conteneurs et ports publiés
+  (proto, host_ip, host_port, conteneur, réseau), détecte les chaînes iptables
+  `DOCKER` / `DOCKER-USER`, et le mode réseau (`--network host` = criticité haute).
+- **Pourquoi** : Docker écrit ses règles AVANT ufw/firewalld — un port publié sur
+  0.0.0.0 est ouvert quelle que soit la politique ufw affichée. Piège documenté,
+  source de trous réels ; personne ne le remonte dans un RMM généraliste.
+- **Design dérive (N3)** : hash canonique = chaînes STABLES seulement
+  (INPUT/FORWARD + DOCKER-USER) ; les chaînes dynamiques `DOCKER*` ne déclenchent
+  pas de fausse dérive ; l'état d'exposition (ports publiés) est comparé et alerté
+  séparément. Dérive ≠ exposition.
+- **Gestion (avec J4)** : règles conteneurs appliquées dans `DOCKER-USER` (ré-injection
+  au démarrage du service par l'agent, elles ne survivent pas seules au reboot) ;
+  snapshot/rollback capturent DOCKER-USER + NAT, pas seulement ufw/nft.
+- **Profil N4 « Hôte Docker »** : INPUT strict + DOCKER-USER restreinte + alerte sur
+  tout publish 0.0.0.0 non déclaré.
+- **Kubernetes — périmètre honnête** : durcissement de l'INPUT du node + surveillance
+  (remontée) du CNI ; on ne gère PAS kube-proxy. Pas de promesse de vente.
+- **Effort** : M — détection/remontée seule S-M (livrable avec J3-J4), gestion
+  DOCKER-USER avec J4, intégration au rapport N17 (NIS2) en Vague 6.
+
 ## Proposition de vagues (N1-N15 toutes ✅ 02/11 ; N16 ✅ « à terme »)
 
 - **Vague 1 — socles à câbler dès la conception** : N12, N14, N10, N5
   *(impossibles ou coûteux à rajouter après coup)*
-- **Vague 2 — puissance firewall** : N2 → N3 → N1 → N6
-  *(dans cet ordre : le diff canonique ouvre la dérive, puis break-glass, puis prédictif)*
+- **Vague 2 — puissance firewall** : N2 → N3 → N1 → N6 → **N20 (✅ 02/11)**
+  *(diff canonique → dérive → break-glass → prédictif ; N20 s'y greffe : détection
+  conteneurs d'abord (remontée seule), gestion DOCKER-USER avec J4)*
 - **Vague 3 — exploitation à l'échelle** : N8, N9, N4, N15
 - **Vague 4 — différenciateurs marché** : N7, N11, N13
 - **Vague 5 — sauvegarde natif (à terme)** : N16 — moteur type UrBackup à CODER, phasage B1→B4

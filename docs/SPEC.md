@@ -98,6 +98,38 @@ L'agent détecte, à chaque inventaire et à chaque heartbeat :
 Ordre de détection Linux : nftables direct → firewalld → ufw → iptables-legacy.
 L'UI affiche un badge par host (ex. `firewalld 1.2.4 · backend nftables`).
 
+### 3.2bis Détection des conteneurs — Docker & Podman (02/11, idée N20 ✅)
+
+L'agent détecte les runtimes de conteneurs et remonte, à chaque inventaire (et au
+heartbeat si un changement est survenu) :
+- le/les **runtimes présents et actifs** : Docker, Podman (+ docker-compose,
+  Containerd nu, Kubernetes détecté séparément) ;
+- les **ports publiés** par conteneur : `{proto, host_ip, host_port, container,
+  réseau}` — un publish sur `0.0.0.0` est un finding à part (« exposé sur toutes
+  les interfaces ») ;
+- le **canal de contournement** : présence des chaînes iptables/nftables `DOCKER`,
+  `DOCKER-USER` — c'est ce qui permet d'afficher l'avertissement honnête :
+  « Docker écrit ses propres règles AVANT ufw/firewalld ; les ports publiés
+  ignorent la politique du firewall hôte » ;
+- le **mode réseau** : bridge / host / macvlan (un conteneur en `--network host`
+  contourne tout et doit être signalé en criticité haute).
+
+Conséquences produit (voir IDEES.md N20) :
+- **Dashboard** : section « Conteneurs » par host (runtime, conteneurs, ports
+  exposés) — surface d'attaque visible, finding de premier plan pour le rapport NIS2.
+- **Dérive N3** : le hash canonique du ruleset reste sur les chaînes STABLES
+  (INPUT/FORWARD + DOCKER-USER) ; les chaînes dynamiques `DOCKER*` ne déclenchent
+  PAS de dérive, mais l'**état d'exposition** (ports publiés) est comparé et
+  alerté séparément. Dérive ≠ exposition.
+- **Gestion FW (J4)** : la chaîne `DOCKER-USER` (consultée par Docker AVANT ses
+  règles propres) est le point d'application des règles conteneurs ; snapshot et
+  rollback capturent DOCKER-USER et le NAT, pas seulement ufw/nft.
+- **Honnêteté de périmètre** : sur un node Kubernetes, l'agent durcit l'INPUT du
+  node et SURVEILLE (remonte) le CNI, il ne le gère pas. Pas de promesse kube-proxy.
+- **Conseil opérateur** (affiché, pas imposé) : publier sur `127.0.0.1` derrière
+  reverse proxy + réseaux internes ; l'option `--iptables=false` est détectée
+  comme mauvaise pratique (elle casse NAT/DNS des conteneurs), jamais proposée.
+
 ### 3.3 Télémétrie remontée
 CPU, RAM, disques, réseau (débit/latence), uptime, load, températures si dispo,
 liste des services clés et leur état, versions des paquets (inventaire), état du firewall,

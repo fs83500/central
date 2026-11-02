@@ -42,7 +42,7 @@ Toutes ✅. Détail complet dans `docs/IDEES.md`. Résumé :
 | Vague | Idées | Logique |
 |-------|-------|---------|
 | 1 · Socles à câbler dès la conception | N12 · N14 · N10 · N5 | Impossibles/3× plus coûteux à ajouter après coup |
-| 2 · Puissance firewall | N2 → N3 → N1 → N6 | Le diff canonique ouvre dérive, break-glass, prédictif |
+| 2 · Puissance firewall | N2 → N3 → N1 → N6 · N20 | Diff canonique → dérive → break-glass → prédictif ; N20 : détection conteneurs (✅ 02/11) |
 | 3 · Échelle | N8 · N9 · N4 · N15 | Canari, blacklist, profils, CVE |
 | 4 · Différenciateurs | N7 · N11 · N13 | Repo cache, air-gap, automatisation |
 | 5 · Sauvegarde natif (à terme) | N16 — B1 → B2 → B3 → B4 | Voir ci-dessous |
@@ -82,3 +82,17 @@ Toutes ✅. Détail complet dans `docs/IDEES.md`. Résumé :
   pack conformité initial ~990 € HT.
 - **Honnêteté** : pas de « certification ANSSI » (elle n'existe pas), pas un GRC — on fournit
   les preuves techniques du pilotage (patching, FW, inventaire, audit infalsifiable, restauration).
+
+## D. Conteneurs — détection Docker/Podman (N20 ✅ 02/11)
+
+- **Le problème** : Docker contourne ufw/firewalld (chaînes DOCKER insérées avant,
+  NAT en PREROUTING) — un port publié sur 0.0.0.0 est ouvert malgré « ufw deny ».
+- **N20** : l'agent détecte runtimes, conteneurs, ports publiés (flag 0.0.0.0),
+  chaînes DOCKER/DOCKER-USER, mode `--network host` (criticité haute) ; remonte
+  heartbeat/inventaire ; UI « Conteneurs » par host ; gestion FW conteneurs via
+  DOCKER-USER avec J4 ; snapshot/rollback capturent DOCKER-USER + NAT.
+- **Dérive ≠ exposition** : hash canonique sur chaînes stables uniquement ;
+  l'état d'exposition est alerté à part.
+- **Kubernetes** : durcissement INPUT du node + surveillance du CNI — pas de
+  gestion kube-proxy (périmètre honnête).
+- **SPEC §3.2bis** — détail complet. Effort M, vague 2, P1.
