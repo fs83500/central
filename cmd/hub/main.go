@@ -1,17 +1,19 @@
 // Command hub is the UnifiedGuard centrale (self-hosted central server).
-// J1: migrations + /api/v1/enroll (token→CSR→cert) + agent WebSocket (mTLS)
-// + heartbeat/telemetry/inventory storage + audit chain endpoints.
+// J1: migrations + /api/v1/enroll + agent WebSocket (mTLS) + telemetry
+// storage + audit chain. J2: dashboard (login/MFA, hosts, host detail,
+// enrollment, audit) + theme light/dark/auto + REST API.
 package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"git.dpnac.cloud/dpnac/central/hub/auth"
 	"git.dpnac.cloud/dpnac/central/hub/server"
+	"git.dpnac.cloud/dpnac/central/hub/ui"
 	"git.dpnac.cloud/dpnac/central/internal/audit"
 	"git.dpnac.cloud/dpnac/central/internal/cryptoutil"
 	"git.dpnac.cloud/dpnac/central/internal/store"
@@ -22,6 +24,7 @@ func main() {
 	addr := getenv("HUB_LISTEN", ":8080")
 	dsn := getenv("HUB_DATABASE", "")
 	domain := getenv("HUB_DOMAIN", "central.acme.fr")
+	dev := os.Getenv("HUB_DEV") == "1"
 
 	// Bootstrap: CA + DB (required for anything beyond /ping).
 	var (
@@ -37,22 +40,18 @@ func main() {
 		if auditStore, err = audit.NewPGStore(dsn); err != nil {
 			log.Fatalf("hub: audit store: %v", err)
 		}
-		// The internal CA is persisted on the volume; J1 keeps it in-memory
-		// per process (prod persistence arrives with the keys volume in J2).
+		// The internal CA is persisted on the volume; J1/J2 keep it in-memory
+		// per process (prod persistence arrives with the keys volume).
 		if ca, err = cryptoutil.NewInternalCA("unifiedguard-hub-ca", time.Now().UnixNano()); err != nil {
 			log.Fatalf("hub: CA: %v", err)
 		}
 	}
 
-	srvHub := &server.Server{DB: db, CA: ca, Audit: auditStore, Domain: domain, Quota: 5}
+	srvHub := &server.Server{DB: db, CA: ca, Audit: auditStore, Domain: domain, Quota: 5, DevMode: dev}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/ping", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{
-			"ok":      true,
-			"version": version.String(),
-			"hash":    version.SelfHash(),
-		})
+		writeJSON(w, map[string]any{"ok": true, "version": version.String(), "hash": version.SelfHash()})
 	})
 
 	// Enrollment (PLAN §3.1): token in the JSON body, never the URL.
@@ -60,7 +59,7 @@ func main() {
 	// Agent WebSocket (the agent initiates — golden rule SPEC §2.1).
 	mux.HandleFunc("GET /agent/v1/ws", srvHub.HandleWS)
 
-	// /api/v1/audit/verify — the chain verifier endpoint (N5). Requires the DB.
+	// Audit chain verifier (N5) — public read-only integrity proof.
 	mux.HandleFunc("GET /api/v1/audit/verify", func(w http.ResponseWriter, r *http.Request) {
 		if auditStore == nil {
 			writeJSON(w, map[string]any{"ok": false, "error": "HUB_DATABASE not configured"})
@@ -81,22 +80,69 @@ func main() {
 		writeJSON(w, map[string]any{"ok": false, "error": "chain verification failed"})
 	})
 
-	// Dev-only helper: create an enrollment token (J2 moves this to the
-	// dashboard with auth; the token is printed ONCE — only its hash is stored).
+	// Static assets (CSS + theme.js) and pages.
+	mux.Handle("GET /static/", ui.Static())
+
+	// Auth endpoints (no session required).
+	mux.HandleFunc("POST /api/v1/auth/login", srvHub.HandleLogin)
+	mux.HandleFunc("POST /api/v1/auth/mfa", srvHub.HandleMFA)
+	mux.HandleFunc("GET /logout", srvHub.HandleLogout)
+
+	// Session-gated API + pages.
+	requireUser := auth.RequireUser(db.SQL, nil)
+	gate := func(h http.HandlerFunc) http.Handler { return requireUser(http.HandlerFunc(h)) }
+
+	mux.Handle("GET /api/v1/me", gate(srvHub.HandleMe))
+	mux.Handle("PATCH /api/v1/me/theme", gate(srvHub.HandleSetTheme))
+	mux.Handle("GET /api/v1/hosts", gate(srvHub.HandleHosts))
+	mux.Handle("GET /api/v1/hosts/{id}", gate(srvHub.HandleHost))
+	mux.Handle("POST /api/v1/enroll/tokens", gate(srvHub.HandleCreateToken))
+	mux.Handle("GET /api/v1/audit/events", gate(srvHub.HandleAuditEvents))
+
+	mux.Handle("GET /login", ui.Page("login.html"))
+	mux.Handle("GET /hosts/{id}", gate(func(w http.ResponseWriter, r *http.Request) {
+		servePage(w, "host.html")
+	}))
+	mux.Handle("GET /hosts", gate(func(w http.ResponseWriter, r *http.Request) {
+		servePage(w, "hosts.html")
+	}))
+	mux.Handle("GET /enroll", gate(func(w http.ResponseWriter, r *http.Request) {
+		servePage(w, "enroll.html")
+	}))
+	mux.Handle("GET /audit", gate(func(w http.ResponseWriter, r *http.Request) {
+		servePage(w, "audit.html")
+	}))
+	mux.Handle("GET /{$}", gate(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/hosts", http.StatusSeeOther)
+	}))
+
+	// Dev-only helper: create an enrollment token (the token is printed ONCE).
 	if os.Getenv("HUB_DEV_TOKEN") != "" {
 		raw := mustCreateToken(srvHub)
-		fmt.Printf("DEV enrollment token: %s\n", raw)
+		log.Printf("DEV enrollment token: %s", raw)
+	}
+	// Dev-only: create the first admin user (double opt-in is replaced by the
+	// HUB_DEV=1 bootstrap; production onboarding flow arrives with J9 mail).
+	if dev && db != nil {
+		email := getenv("HUB_DEV_ADMIN", "admin@dpnac.fr")
+		if err := server.BootstrapDevUser(db, email, getenv("HUB_DEV_ADMIN_PASSWORD", "changeme")); err != nil {
+			log.Printf("hub: dev admin: %v", err)
+		} else {
+			log.Printf("DEV admin ready: %s (activate via /login + MFA dev code in logs)", email)
+		}
 	}
 
-	httpSrv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	log.Printf("hub %s listening on %s (J1)", version.String(), addr)
+	httpSrv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	log.Printf("hub %s listening on %s (J2) — domain %s dev=%v", version.String(), addr, domain, dev)
 	if err := httpSrv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+func servePage(w http.ResponseWriter, name string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h := ui.Page(name)
+	h.ServeHTTP(w, nil) //nolint:staticcheck // Page is a static byte blob
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

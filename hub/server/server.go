@@ -32,8 +32,18 @@ type Server struct {
 	Domain string // locked FQDN (SPEC §4.1)
 	// quota: max hosts from subscription (pushed by fleet later; default 5)
 	Quota int32
+	// DevMode: log the MFA code instead of e-mailing it (J2 dev; SMTP in J9).
+	DevMode bool
 
 	serial atomic.Int64
+}
+
+// logDevMFA prints the login code in dev only (never in production builds
+// config: HUB_DEV=1 gate, see cmd/hub).
+func (s *Server) logDevMFA(email, code string) {
+	if s.DevMode {
+		log.Printf("DEV MFA code for %s: %s (SMTP arrives in J9)", email, code)
+	}
 }
 
 // enrollReq mirrors agent/enroll.Request (token in the BODY).

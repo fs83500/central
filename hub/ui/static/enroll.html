@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="auto">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enrollment — UnifiedGuard</title>
+<link rel="stylesheet" href="/static/app.css">
+<script>/* anti-FOUC: apply saved theme before first paint */try{var t=localStorage.getItem('ug-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">Unified<span>Guard</span>.cloud</div>
+  <div class="site" id="site">central…</div>
+  <div class="spacer"></div>
+  <div class="theme-pick" role="group" aria-label="Thème">
+    <button type="button" data-set-theme="light" title="Thème clair">☀</button>
+    <button type="button" data-set-theme="auto" class="on" title="Auto (système)">◐</button>
+    <button type="button" data-set-theme="dark" title="Thème sombre">☾</button>
+  </div>
+  <div class="user" id="user"></div>
+  <a class="btn small sec" href="/logout" id="logout" style="color:var(--ink)">Déconnexion</a>
+</div>
+<div class="shell">
+  <div class="sidenav">
+    <div class="grp">Surveillance</div>
+    <a href="/hosts">Hôtes</a>
+    <a class="on" href="/enroll">Enrollment</a>
+    <div class="grp">Journal</div>
+    <a href="/audit">Audit</a>
+  </div>
+  <div class="main">
+    <h1>Enrollment</h1>
+    <p class="sub">Création d'un token — usage unique, TTL 24 h, jamais stocké en clair. <b>Création = action critique (re-auth J9)</b>.</p>
+    <div class="panel">
+      <h2>Nouveau token</h2>
+      <div class="banner">Le token n'est affiché <b>qu'une seule fois</b> : copiez-le maintenant. Il n'est jamais écrit dans les logs ni en base en clair (SHA-256 seulement).</div>
+      <label for="label">Libellé (machine, demande…)</label>
+      <input type="text" id="label" placeholder="srv-web-01">
+      <button class="btn" id="create" style="margin-top:12px">Générer un token</button>
+      <div id="tok" class="okline" hidden></div>
+    </div>
+    <div class="panel">
+      <h2>Installation une commande</h2>
+      <p class="sub" style="margin-bottom:8px">Le script est servi par <b>la centrale</b> (jamais le global — règle d'or) :</p>
+      <pre class="mono" id="oneliner" style="background:var(--hover);padding:10px 12px;border-radius:8px;overflow:auto">—</pre>
+      <button class="btn sec small" id="copy">Copier</button>
+      <div class="note">Vérifiez le SHA-256 du paquet contre le manifest signé Ed25519 avant installation (géré par le script).</div>
+    </div>
+  </div>
+</div>
+<script src="/static/theme.js"></script>
+<script>
+'use strict';
+initTheme();
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+document.getElementById('create').addEventListener('click', async () => {
+  const r = await fetch('/api/v1/enroll/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: document.getElementById('label').value || '' }) });
+  if (r.status === 401) { location.href = '/login'; return; }
+  const data = await r.json();
+  const tok = document.getElementById('tok');
+  tok.hidden = false;
+  tok.innerHTML = `<b>Token (copiez-le maintenant) :</b> <span class="mono">${esc(data.token)}</span>`;
+  document.getElementById('oneliner').textContent = `curl -fsSL https://${location.host}/install.sh | bash -s -- --token=${data.token}`;
+});
+
+document.getElementById('copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(document.getElementById('oneliner').textContent); } catch { /* noop */ }
+});
+
+(async () => {
+  const u = await fetch('/api/v1/me').then((r) => r.json());
+  document.getElementById('user').textContent = u.email + ' · ' + u.role;
+  document.getElementById('site').textContent = location.host;
+  initThemeFromServer(u.theme);
+})();
+</script>
+</body>
+</html>

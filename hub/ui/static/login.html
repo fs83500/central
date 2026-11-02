@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="auto">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connexion — UnifiedGuard</title>
+<link rel="stylesheet" href="/static/app.css">
+<script>/* anti-FOUC: apply saved theme before first paint */try{var t=localStorage.getItem('ug-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login">
+    <h1>Unified<span style="color:var(--acc)">Guard</span></h1>
+    <p class="sub" id="site">central…</p>
+    <div id="err" class="err" hidden></div>
+    <form id="login-form">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" autocomplete="username" required>
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+      <button class="btn wide" type="submit">Se connecter</button>
+    </form>
+    <form id="mfa-form" hidden>
+      <label for="code">Code MFA (envoyé par e-mail)</label>
+      <input type="text" id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+      <button class="btn wide" type="submit">Valider le code</button>
+    </form>
+  </div>
+  <div class="theme-pick" role="group" aria-label="Thème">
+    <button type="button" data-set-theme="light" title="Thème clair">☀</button>
+    <button type="button" data-set-theme="auto"  class="on" title="Auto (système)">◐</button>
+    <button type="button" data-set-theme="dark"  title="Thème sombre">☾</button>
+  </div>
+</div>
+<script src="/static/theme.js"></script>
+<script>
+'use strict';
+initTheme(); // apply saved theme before first paint of the picker state
+
+const err = document.getElementById('err');
+function showErr(msg) { err.textContent = msg; err.hidden = false; }
+
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return { status: r.status, data: await r.json().catch(() => ({})) };
+}
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  err.hidden = true;
+  const { status, data } = await post('/api/v1/auth/login', {
+    email: document.getElementById('email').value,
+    password: document.getElementById('password').value,
+  });
+  if (status === 200 && data.mfa_required) {
+    document.getElementById('login-form').hidden = true;
+    document.getElementById('mfa-form').hidden = false;
+    document.getElementById('code').focus();
+    return;
+  }
+  if (status === 200 && data.ok) { location.href = '/hosts'; return; }
+  if (status === 429) { showErr('Trop de tentatives — réessayez plus tard.'); return; }
+  showErr(data.error || 'Identifiants invalides.');
+});
+
+document.getElementById('mfa-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  err.hidden = true;
+  const { status, data } = await post('/api/v1/auth/mfa', {
+    email: document.getElementById('email').value,
+    code: document.getElementById('code').value,
+  });
+  if (status === 200 && data.ok) { location.href = '/hosts'; return; }
+  showErr(data.error || 'Code invalide ou expiré.');
+});
+</script>
+</body>
+</html>
