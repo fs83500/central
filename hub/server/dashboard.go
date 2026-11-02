@@ -202,7 +202,16 @@ func (s *Server) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
 	auth.SetSessionCookie(w, r, raw)
 	s.auditUser(email, "login", "ok", email, `{"reason":"dev GET login (preview proxy)"}`)
 	// Top-level navigation: redirect so the browser lands on the dashboard
-	// instead of showing raw JSON.
+	// instead of showing raw JSON. Under the sandbox preview proxy the
+	// Set-Cookie above is stripped, so we also bridge the session: a one-time
+	// token lets hosts.js redeem it and carry the session as ?st= on API calls
+	// (dev only — see dev_bridge.go).
+	if s.DevMode {
+		if tok, err := issueBridgeToken(raw); err == nil {
+			http.Redirect(w, r, "hosts?t="+tok, http.StatusSeeOther)
+			return
+		}
+	}
 	http.Redirect(w, r, "hosts", http.StatusSeeOther)
 }
 

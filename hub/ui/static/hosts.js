@@ -5,7 +5,7 @@ initTheme();
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function refresh() {
-  const r = await fetch('api/v1/hosts');
+  const r = await fetch(ugApi('api/v1/hosts'));
   if (r.status === 401) { location.href = 'login'; return; }
   const data = await r.json();
   document.getElementById('site').textContent = data.domain || '';
@@ -27,9 +27,9 @@ async function refresh() {
       <td class="mono">${esc(h.last_seen || 'jamais')}</td>
       <td class="mono">${h.rtt_ms ? esc(h.rtt_ms) + ' ms' : '—'}</td>
     </tr>`).join('');
-  const u = await fetch('api/v1/me').then((r) => r.json());
+  const u = await fetch(ugApi('api/v1/me')).then((r) => r.json());
   document.getElementById('user').textContent = u.email + ' · ' + u.role;
   initThemeFromServer(u.theme);
 }
-refresh();
+ugBridgeReady.then(refresh);
 setInterval(refresh, 10000);

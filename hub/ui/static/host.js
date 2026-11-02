@@ -33,7 +33,7 @@ function fmtUptime(s) {
 }
 
 async function refresh() {
-  const r = await fetch('api/v1/hosts/' + hostID);
+  const r = await fetch(ugApi('api/v1/hosts/' + hostID));
   if (r.status === 401) { location.href = 'login'; return; }
   const h = await r.json();
   document.getElementById('site').textContent = h.domain || '';
@@ -58,9 +58,9 @@ async function refresh() {
   document.getElementById('arows').innerHTML = (h.audit || []).map((a) => `
     <tr><td class="mono">${a.seq}</td><td class="mono">${esc(a.ts)}</td><td class="mono">${esc(a.actor)}</td><td>${esc(a.action)}</td>
     <td><span class="chip ${a.result === 'ok' ? 'ok' : 'crit'}">${esc(a.result)}</span></td><td class="mono">${esc((a.hash || '').slice(0, 12))}…</td></tr>`).join('');
-  const u = await fetch('api/v1/me').then((r) => r.json());
+  const u = await fetch(ugApi('api/v1/me')).then((r) => r.json());
   document.getElementById('user').textContent = u.email + ' · ' + u.role;
   initThemeFromServer(u.theme);
 }
-refresh();
+ugBridgeReady.then(refresh);
 setInterval(refresh, 10000);

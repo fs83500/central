@@ -1,12 +1,45 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 Correctif CSP preview livré — zéro script/style inline, tout externe
+## Statut : 🎉 Pont de session preview livré (?st=) — login preview opérationnel
 
-Dernière mise à jour : 2026-11-02 ~20h50
+Dernière mise à jour : 2026-11-02 ~21h15
 
 ## Tâche en cours
-- **Rien en cours** — correctif CSP livré. Prochaine : J3 (ping applicatif
+- **Rien en cours** — correctif livré. Prochaine : J3 (ping applicatif
   + file d'actions) sur validation de Fabien après recette preview.
+
+## Pont de session preview — 02/11 ~21h (retour « après le login : JSON unauthenticated »)
+
+### Cause racine (3ᵉ découverte, la bonne)
+Le proxy preview ne strippe pas seulement les POST : il **isole les cookies
+dans les 2 sens**. Preuve en base : la session Android de Fabien (20:53:42,
+audit seq 120) a été **créée** mais **jamais re-vue** — ni `Set-Cookie` ne
+repart vers le navigateur, ni `Cookie` ne revient vers le hub. Comportement
+sain côté plateforme (une preview ne doit pas toucher les cookies du domaine
+partagé bot.dpnac.cloud), fatal pour notre session par cookie.
+
+### Solution livrée : session dans l'URL (dev-only, pont one-shot)
+- **dev-login** réussit serveur-côté → émet un **token pont one-shot** (32 o
+  aléatoires, en mémoire process, TTL 90 s, usage unique) → redirect
+  `hosts?t=<token>`.
+- **session.js** (nouveau) : au chargement, échange `?t=` contre le token de
+  session (`GET /dev/session/redeem` → `{ok, st}`), le stocke en
+  **sessionStorage**, purge l'URL, et le porte sur **chaque appel API** via
+  `ugApi()` (`?st=…`) ; toutes les pages JS attendent `ugBridgeReady` avant
+  le premier fetch ; hook logout purger `ug-st`.
+- **RequireUser** accepte `?st=` en dev seulement (`acceptSessionParam`) ;
+  **ClearSessionCookie** révoque aussi via `?st=` (logout preview).
+- **Pages HTML dégatées en dev uniquement** (elles ne portent aucune donnée :
+  les tableaux sont remplis par les API gated ; en prod le gate reste —
+  vérifié par simu `HUB_DEV` vide → 401 sur /hosts sans session).
+- 401 du gate → vrai `application/json` (plus de text/plain brut à l'écran).
+
+### Preuves (recette E2E sans cookie du tout)
+- dev-login → `303 /preview/codex/8802/hosts?t=<64 hex>` ; redeem → `{ok,st}` ;
+  rejeu du one-time → **401** (usage unique) ; APIs `?st=` → 200 ; mauvais
+  st → 401 ; logout `?st=` → révocation (me → 401 ensuite).
+- `go test ./...` ok ; go vet ok ; gofmt ok ; node --check 7 fichiers JS ok.
+- Simu prod (HUB_DEV vide) : /hosts sans session → 401, /login → 200.
 
 ## Correctif CSP — 02/11 soir (2ᵉ retour Fabien : « toujours pas, thème KO »)
 

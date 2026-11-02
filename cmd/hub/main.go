@@ -148,8 +148,9 @@ func main() {
 		mux.HandleFunc("GET /dev-login", srvHub.HandleDevLogin)
 	}
 
-	// Session-gated API + pages.
-	requireUser := auth.RequireUser(db.SQL, nil)
+	// Session-gated API + pages. In dev the ?st= query param carries the
+	// session when cookies are stripped by the sandbox preview proxy.
+	requireUser := auth.RequireUser(db.SQL, nil, dev)
 	gate := func(h http.HandlerFunc) http.Handler { return requireUser(http.HandlerFunc(h)) }
 
 	mux.Handle("GET /api/v1/me", gate(srvHub.HandleMe))
@@ -158,12 +159,23 @@ func main() {
 	mux.Handle("GET /api/v1/hosts/{id}", gate(srvHub.HandleHost))
 	// Dev-only GET twins for the preview proxy (POST/PATCH blocked there).
 	mux.Handle("GET /dev/enroll/tokens", gate(srvHub.HandleDevCreateToken))
+	// Dev-only one-time session bridge (see dev_bridge.go).
+	mux.HandleFunc("GET /dev/session/redeem", srvHub.HandleDevBridgeRedeem)
 	mux.Handle("GET /dev/me/theme", gate(srvHub.HandleDevSetTheme))
 	mux.Handle("POST /api/v1/enroll/tokens", gate(srvHub.HandleCreateToken))
 	mux.Handle("GET /api/v1/audit/events", gate(srvHub.HandleAuditEvents))
 
 	mux.Handle("GET /login", ui.Page("login.html"))
-	mux.Handle("GET /hosts", gate(func(w http.ResponseWriter, r *http.Request) {
+	// In dev the sandbox preview proxy strips cookies in BOTH directions, so
+	// the browser can never present a session to PAGE routes — pages are
+	// served ungated there (they contain no data: every table is filled by
+	// gated API calls that carry ?st=). In production the cookie works and
+	// the page gate below stays enforced.
+	page := func(h http.HandlerFunc) http.Handler { return http.HandlerFunc(h) }
+	if !dev {
+		page = gate
+	}
+	mux.Handle("GET /hosts", page(func(w http.ResponseWriter, r *http.Request) {
 		// ?id= → host detail. Query param keeps every page at depth 1 so
 		// relative assets/api paths work behind any proxy prefix.
 		if id := r.URL.Query().Get("id"); id != "" {
@@ -174,16 +186,16 @@ func main() {
 	}))
 	// Legacy deep links /hosts/{id} → hosts?id= (relative redirect keeps
 	// any proxy prefix, e.g. the sandbox preview).
-	mux.Handle("GET /hosts/{id}", gate(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /hosts/{id}", page(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "../hosts?id="+r.PathValue("id"), http.StatusSeeOther)
 	}))
-	mux.Handle("GET /enroll", gate(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /enroll", page(func(w http.ResponseWriter, r *http.Request) {
 		servePage(w, "enroll.html")
 	}))
-	mux.Handle("GET /audit", gate(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /audit", page(func(w http.ResponseWriter, r *http.Request) {
 		servePage(w, "audit.html")
 	}))
-	mux.Handle("GET /{$}", gate(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /{$}", page(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "hosts", http.StatusSeeOther)
 	}))
 

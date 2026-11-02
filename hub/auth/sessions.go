@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -72,9 +73,11 @@ func SetSessionCookie(w http.ResponseWriter, r *http.Request, raw string) {
 }
 
 // ClearSessionCookie revokes the session server-side and clears the cookie.
+// Under the sandbox preview the caller has no cookie (proxy strips them):
+// the session token then arrives as ?st= and is revoked just the same.
 func ClearSessionCookie(db *sql.DB, w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(CookieName); err == nil {
-		_, _ = db.Exec(`UPDATE hub_sessions SET revoked_at = now() WHERE token_hash = $1`, HashToken(c.Value))
+	if raw := SessionTokenFromRequest(r); raw != "" {
+		_, _ = db.Exec(`UPDATE hub_sessions SET revoked_at = now() WHERE token_hash = $1`, HashToken(raw))
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: CookieName, Value: "", Path: "/", MaxAge: -1,
@@ -210,19 +213,37 @@ type contextKey struct{}
 
 // RequireUser wraps a handler requiring a valid session. It stores the user
 // in the request context. 401 JSON when not authenticated.
-func RequireUser(db *sql.DB, auditFn AuditFn) func(http.Handler) http.Handler {
+//
+// The token comes from the session cookie (prod) OR the ?st= query param.
+// The ?st= path exists because the sandbox preview proxy strips cookie
+// headers in BOTH directions (Set-Cookie never reaches the browser, Cookie
+// never reaches the app): the preview UI exchanges a one-time bridge token
+// (dev/session/redeem) and then carries the session as ?st=. It is gated by
+// HUB_DEV (acceptSessionParam): never enabled in production.
+func RequireUser(db *sql.DB, auditFn AuditFn, acceptSessionParam bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			c, err := r.Cookie(CookieName)
-			if err != nil {
-				http.Error(w, `{"error":"unauthenticated"}`, http.StatusUnauthorized)
+			var raw string
+			if c, err := r.Cookie(CookieName); err == nil {
+				raw = c.Value
+			} else if acceptSessionParam {
+				raw = r.URL.Query().Get("st")
+			}
+			if raw == "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, `{"error":"unauthenticated"}`)
 				return
 			}
-			u := SessionUser(db, c.Value)
+			u := SessionUser(db, raw)
 			if u == nil {
-				http.Error(w, `{"error":"invalid session"}`, http.StatusUnauthorized)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, `{"error":"invalid session"}`)
 				return
 			}
+			// ?st= is only for the cookie-stripped preview: refresh its cookie
+			// counterpart too (no-op when the browser already has it).
 			ctx := context.WithValue(r.Context(), contextKey{}, u)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -233,6 +254,17 @@ func RequireUser(db *sql.DB, auditFn AuditFn) func(http.Handler) http.Handler {
 func FromContext(ctx context.Context) *User {
 	u, _ := ctx.Value(contextKey{}).(*User)
 	return u
+}
+
+// SessionTokenFromRequest returns the raw session token presented by the
+// request: the cookie (prod) or the ?st= query param (sandbox preview, where
+// the proxy strips cookie headers in both directions). Used by logout to
+// revoke what the caller actually presents.
+func SessionTokenFromRequest(r *http.Request) string {
+	if c, err := r.Cookie(CookieName); err == nil {
+		return c.Value
+	}
+	return r.URL.Query().Get("st")
 }
 
 // Logf is a small alias so callers can plug their own logger (slog later).

@@ -21,8 +21,8 @@ function setTheme(mode, persist) {
   if (persist) {
     // PATCH is blocked by the sandbox preview proxy (GET-only): fall back to
     // the dev-only GET twin. Best-effort — theme is also in localStorage.
-    fetch('api/v1/me/theme', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ theme: mode }) })
-      .then((r) => { if (r.status === 405) fetch('dev/me/theme?theme=' + encodeURIComponent(mode)).catch(() => {}); })
+    fetch(ugApi('api/v1/me/theme'), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ theme: mode }) })
+      .then((r) => { if (r.status === 405) fetch(ugApi('dev/me/theme', { theme: mode })).catch(() => {}); })
       .catch(() => {});
   }
 }
