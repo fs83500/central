@@ -1,0 +1,21 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: none
+  enable:
+    - errcheck          # unchecked errors
+    - govet             # vet
+    - staticcheck       # correctness
+    - gosec             # security (G*)
+    - ineffassign
+    - misspell
+    - bodyclose
+    - contextcheck
+output:
+  sort-results: true
+issues:
+  exclude-rules:
+    # test files: gosec flags math/rand etc., acceptable in tests
+    - path: _test\.go
+      linters: [gosec]

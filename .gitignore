@@ -1,0 +1,12 @@
+# Editor / build noise
+bin/
+*.test
+*.out
+coverage.*
+
+# Local env — NEVER commit secrets
+.env
+*.env.local
+
+# OS
+.DS_Store
