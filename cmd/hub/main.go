@@ -89,8 +89,11 @@ func main() {
 
 	// Dev preview helper: the sandbox preview proxy may forward the request
 	// with its /preview/<agent>/<port>/ prefix intact. The dashboard UI uses
-	// relative paths only, so this middleware simply strips that prefix when
-	// present — HUB_UI_PREFIX is empty in production (Caddy strips it).
+	// relative paths only, so this middleware strips that prefix when present
+	// (HUB_UI_PREFIX is empty in production — Caddy strips it) and re-prefixes
+	// the Location header on the way out: Go resolves relative redirects
+	// against the STRIPPED path, which would otherwise send the browser
+	// outside the preview prefix.
 	uiPrefix := getenv("HUB_UI_PREFIX", "")
 	var root http.Handler = mux
 	if uiPrefix != "" {
@@ -99,7 +102,7 @@ func main() {
 			if strings.HasPrefix(r.URL.Path, p+"/") {
 				r.URL.Path = strings.TrimPrefix(r.URL.Path, p)
 			}
-			mux.ServeHTTP(w, r)
+			mux.ServeHTTP(&prefixedRedirect{ResponseWriter: w, prefix: p}, r)
 		})
 	}
 
@@ -140,6 +143,10 @@ func main() {
 	mux.HandleFunc("POST /api/v1/auth/login", srvHub.HandleLogin)
 	mux.HandleFunc("POST /api/v1/auth/mfa", srvHub.HandleMFA)
 	mux.HandleFunc("GET /logout", srvHub.HandleLogout)
+	// Dev-only single-GET login fallback (preview proxy forwards GET only).
+	if dev {
+		mux.HandleFunc("GET /dev-login", srvHub.HandleDevLogin)
+	}
 
 	// Session-gated API + pages.
 	requireUser := auth.RequireUser(db.SQL, nil)
@@ -149,6 +156,9 @@ func main() {
 	mux.Handle("PATCH /api/v1/me/theme", gate(srvHub.HandleSetTheme))
 	mux.Handle("GET /api/v1/hosts", gate(srvHub.HandleHosts))
 	mux.Handle("GET /api/v1/hosts/{id}", gate(srvHub.HandleHost))
+	// Dev-only GET twins for the preview proxy (POST/PATCH blocked there).
+	mux.Handle("GET /dev/enroll/tokens", gate(srvHub.HandleDevCreateToken))
+	mux.Handle("GET /dev/me/theme", gate(srvHub.HandleDevSetTheme))
 	mux.Handle("POST /api/v1/enroll/tokens", gate(srvHub.HandleCreateToken))
 	mux.Handle("GET /api/v1/audit/events", gate(srvHub.HandleAuditEvents))
 

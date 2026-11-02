@@ -1,12 +1,68 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 J2 (hub MVP + dashboard) TERMINÉ — commit 3511b37 poussé sur origin/main, preview live
+## Statut : 🎉 Correctif login preview livré — dev-login GET + erreurs JSON + re-préfixage Location
 
-Dernière mise à jour : 2026-11-02 ~19h35
+Dernière mise à jour : 2026-11-02 ~20h35
 
 ## Tâche en cours
-- **Rien en cours** — J2 livré (commit 3511b37 poussé). Prochaine : J3 (ping applicatif
+- **Rien en cours** — correctif login preview livré. Prochaine : J3 (ping applicatif
   + file d'actions) sur validation de Fabien après recette preview.
+
+## Correctif login preview — 02/11 soir (échec connexion Fabien + messages d'erreur)
+
+### Diagnostic (3 causes indépendantes)
+1. **Bug UI (cause principale côté hub)** : les 2 `fetch` de `login.html`
+   (`/api/v1/auth/login`, `/api/v1/auth/mfa`) étaient en chemin ABSOLU — le fix
+   `64af7a4` avait corrigé HTML/CSS/nav mais raté les 2 fetch JS. Sous le préfixe
+   preview, le POST sortait du proxy → 405/HTML → message trompeur
+   « Identifiants invalides » alors que la requête n'atteignait jamais le hub.
+2. **Bloqueur infrastructure (proxy preview Bot)** : le proxy ne proxifie que
+   GET/HEAD — le 405 (`allow: GET, HEAD`) est émis par SON routeur AVANT tout
+   check d'auth (sinon les POST non authentifiés seraient 302 vers `/auth/login`
+   comme les GET). **Le POST ne passera donc JAMAIS via preview, même authentifié.**
+3. **Erreurs serveur non conformes** : tous les `http.Error` envoyaient des corps
+   JSON en `Content-Type: text/plain` — parsing fragile, messages génériques.
+
+### Correctifs livrés
+- **`login.html`** : fetch RELATIFS (`api/v1/auth/login|/mfa`) ; `post()` distingue
+  échec réseau / réponse non-JSON / 405 proxy ; `apiErr()` affiche un message
+  distinct par classe (réseau, 405 preview, 429 throttle, 401 login vs MFA, 5xx).
+- **`/dev-login` (dev uniquement, gated `HUB_DEV=1`)** : login 1-clic en GET pour
+  contourner le proxy preview GET-only — vérifie password + throttle, émet ET
+  consomme le code MFA dev côté serveur, set le cookie session, redirect `hosts`.
+  Bouton visible sur la page login UNIQUEMENT sous préfixe `/preview/`; échecs →
+  redirect `login?err=<raison>` affiché dans l'encart erreur. MAIS dev seulement
+  — la route renvoie 404 hors DevMode.
+- **Jumeaux GET dev** pour les actions non-GET bloquées par le proxy preview :
+  `GET /dev/enroll/tokens?label=` (création token), `GET /dev/me/theme?theme=`
+  (sélecteur thème) — mêmes règles auth/audit/validation que les POST/PATCH ;
+  fallback automatique côté UI quand le POST/PATCH renvoie 405.
+- **Re-préfixage des redirects** : le middleware dev strippe `/preview/.../` en
+  entrée mais Go résout les `Location` relatives contre le chemin STRIPPÉ → le
+  navigateur sortait du préfixe (bug prouvé : `Location: /hosts` au lieu de
+  `/preview/codex/8802/hosts`). `prefixedRedirect` ré-écrit maintenant tout
+  `Location` absolue en lui rendant le préfixe.
+- **`apiError()` serveur** : remplace tous les `http.Error` JSON → vrai
+  `Content-Type: application/json` + code HTTP, sur TOUTES les routes dashboard.
+- **`HandleLogout`** : double révocation session supprimée (ClearSessionCookie
+  fait déjà tout).
+
+### Preuves (curl)
+- POST login mauvais mdp → `401 {"error":"invalid credentials"}` en JSON.
+- 6 échecs consécutifs → `401×5 puis 429` (throttle intact).
+- `dev-login?…&password=S3cret!pass` préfixé → `303 Location: /preview/codex/8802/hosts` + `Set-Cookie: ug_session=…` → `GET hosts` 200.
+- mauvais mdp → `303 /preview/codex/8802/login?err=invalid+credentials`.
+- `GET /dev/enroll/tokens?label=preview` → `{"token":"ug-…"}` ; `GET /dev/me/theme?theme=dark` → `{"ok":true}`.
+- Tests Go : `ok` partout (`hub/auth`, `hub/server`, `internal/audit`, `internal/version`).
+
+### Recette preview (pour Fabien)
+1. Ouvrir le lien preview → page login → l'encart « Preview sandbox : POST
+   bloqués — connexion directe en un clic (GET) » est visible.
+2. Renseigner `admin@test.fr` / `S3cret!pass` → cliquer le lien de connexion
+   directe → atterrit sur `/hosts` connecté.
+3. Thème, hosts, détail hôte, audit (lecture) fonctionnent ; création de token
+   d'enrollment et changement de thème passent par les fallbacks GET.
+4. Le mot de passe passe dans l'URL du lien direct (compte dev uniquement).
 
 ## J2 livré le 02/11 soir — commit 3511b37 (tests verts, E2E OK, poussé origin/main)
 - **Télémétrie partitionnée** : migration `005_telemetry_partitions.sql` (une seule

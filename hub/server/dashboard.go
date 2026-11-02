@@ -6,6 +6,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -33,6 +34,15 @@ func userIP(r *http.Request) string {
 	return auth.ClientIP(r)
 }
 
+// apiError writes a JSON API error with the right Content-Type — the old
+// http.Error() sent `{"error":…}` bodies as text/plain, which broke strict
+// JSON parsing and produced misleading "invalid credentials" UI messages.
+func apiError(w http.ResponseWriter, code int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 // HandleLogin is step 1 of the SPEC §4.1 flow: e-mail + Argon2id password →
 // MFA code e-mailed. 429 when throttled (5 failures → backoff).
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +51,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
-		http.Error(w, `{"error":"bad request"}`, http.StatusBadRequest)
+		apiError(w, http.StatusBadRequest, "bad request")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
@@ -51,7 +61,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if th.Locked && time.Now().Before(th.RetryAt) {
 		s.auditUser(req.Email, "login", "denied", req.Email, `{"reason":"throttled"}`)
 		w.Header().Set("Retry-After", "60")
-		http.Error(w, `{"error":"too many attempts"}`, http.StatusTooManyRequests)
+		apiError(w, http.StatusTooManyRequests, "too many attempts")
 		return
 	}
 
@@ -66,20 +76,20 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil || !auth.VerifyPassword(hash, req.Password) {
 		auth.RecordAttempt(s.DB.SQL, req.Email, ip, false)
 		s.auditUser(req.Email, "login", "denied", req.Email, `{"reason":"bad credentials"}`)
-		http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
+		apiError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
 	if !active {
 		auth.RecordAttempt(s.DB.SQL, req.Email, ip, false)
 		s.auditUser(req.Email, "login", "denied", req.Email, `{"reason":"inactive"}`)
-		http.Error(w, `{"error":"account not activated"}`, http.StatusUnauthorized)
+		apiError(w, http.StatusUnauthorized, "account not activated")
 		return
 	}
 
 	auth.RecordAttempt(s.DB.SQL, req.Email, ip, true)
 	code, err := auth.IssueMFACode(s.DB.SQL, id)
 	if err != nil {
-		http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+		apiError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	// J2: SMTP pluggable (J9); in dev the code is logged and returned so the
@@ -100,7 +110,7 @@ func (s *Server) HandleMFA(w http.ResponseWriter, r *http.Request) {
 		Code  string `json:"code"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
-		http.Error(w, `{"error":"bad request"}`, http.StatusBadRequest)
+		apiError(w, http.StatusBadRequest, "bad request")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
@@ -108,12 +118,12 @@ func (s *Server) HandleMFA(w http.ResponseWriter, r *http.Request) {
 	err := s.DB.QueryRow(`SELECT id FROM hub_users WHERE email = $1 AND is_active = TRUE`, req.Email).Scan(&id)
 	if err != nil || !auth.VerifyMFACode(s.DB.SQL, id, req.Code) {
 		s.auditUser(req.Email, "login.mfa", "denied", req.Email, `{"reason":"bad code"}`)
-		http.Error(w, `{"error":"invalid code"}`, http.StatusUnauthorized)
+		apiError(w, http.StatusUnauthorized, "invalid code")
 		return
 	}
 	raw, err := auth.CreateSession(s.DB.SQL, id, r.UserAgent())
 	if err != nil {
-		http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+		apiError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	auth.SetSessionCookie(w, r, raw)
@@ -123,18 +133,84 @@ func (s *Server) HandleMFA(w http.ResponseWriter, r *http.Request) {
 
 // HandleLogout revokes the current session and clears the cookie.
 func (s *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(auth.CookieName); err == nil {
-		_, _ = s.DB.Exec(`UPDATE hub_sessions SET revoked_at = now() WHERE token_hash = $1`, auth.HashToken(c.Value))
-	}
-	auth.ClearSessionCookie(s.DB.SQL, w, r)
+	auth.ClearSessionCookie(s.DB.SQL, w, r) // revokes server-side + clears cookie
 	http.Redirect(w, r, "login", http.StatusSeeOther)
+}
+
+// devLoginError redirects back to login with a machine-readable reason so
+// the login page can show WHY the GET fallback failed (never in production).
+func devLoginError(w http.ResponseWriter, r *http.Request, reason string) {
+	http.Redirect(w, r, "login?err="+url.QueryEscape(reason), http.StatusSeeOther)
+}
+
+// HandleDevLogin is a DEV-ONLY single-GET login fallback: the sandbox preview
+// proxy only forwards GET/HEAD requests (POST is a 405 at the proxy layer),
+// which makes the normal 2-step POST login impossible through that preview.
+// DevMode gates it; it performs the full password + dev-MFA flow server-side
+// and sets the session cookie. NEVER registered in production builds.
+func (s *Server) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.DevMode {
+		apiError(w, http.StatusNotFound, "not found")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
+	password := r.URL.Query().Get("password")
+	ip := userIP(r)
+
+	th := auth.CheckLoginThrottle(s.DB.SQL, email, ip)
+	if th.Locked && time.Now().Before(th.RetryAt) {
+		s.auditUser(email, "login", "denied", email, `{"reason":"throttled"}`)
+		w.Header().Set("Retry-After", "60")
+		devLoginError(w, r, "too many attempts")
+		return
+	}
+	var (
+		id     int64
+		hash   string
+		active bool
+	)
+	if err := s.DB.QueryRow(`SELECT id, password_hash, is_active FROM hub_users WHERE email = $1`, email).
+		Scan(&id, &hash, &active); err != nil || !auth.VerifyPassword(hash, password) {
+		auth.RecordAttempt(s.DB.SQL, email, ip, false)
+		s.auditUser(email, "login", "denied", email, `{"reason":"bad credentials"}`)
+		devLoginError(w, r, "invalid credentials")
+		return
+	}
+	if !active {
+		auth.RecordAttempt(s.DB.SQL, email, ip, false)
+		s.auditUser(email, "login", "denied", email, `{"reason":"inactive"}`)
+		devLoginError(w, r, "account not activated")
+		return
+	}
+	auth.RecordAttempt(s.DB.SQL, email, ip, true)
+	code, err := auth.IssueMFACode(s.DB.SQL, id)
+	if err != nil {
+		devLoginError(w, r, "internal error")
+		return
+	}
+	// The MFA code is verified immediately (DevMode only: the code is logged,
+	// not e-mailed — the sandbox preview is a single-operator dev context).
+	if !auth.VerifyMFACode(s.DB.SQL, id, code) {
+		devLoginError(w, r, "internal error")
+		return
+	}
+	raw, err := auth.CreateSession(s.DB.SQL, id, r.UserAgent())
+	if err != nil {
+		devLoginError(w, r, "internal error")
+		return
+	}
+	auth.SetSessionCookie(w, r, raw)
+	s.auditUser(email, "login", "ok", email, `{"reason":"dev GET login (preview proxy)"}`)
+	// Top-level navigation: redirect so the browser lands on the dashboard
+	// instead of showing raw JSON.
+	http.Redirect(w, r, "hosts", http.StatusSeeOther)
 }
 
 // HandleMe returns the session user (email, role, theme).
 func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 	u := auth.FromContext(r.Context())
 	if u == nil {
-		http.Error(w, `{"error":"unauthenticated"}`, http.StatusUnauthorized)
+		apiError(w, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 	writeJSON(w, map[string]any{"email": u.Email, "role": u.Role, "theme": u.Theme})
@@ -144,28 +220,55 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleSetTheme(w http.ResponseWriter, r *http.Request) {
 	u := auth.FromContext(r.Context())
 	if u == nil {
-		http.Error(w, `{"error":"unauthenticated"}`, http.StatusUnauthorized)
+		apiError(w, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 	var req struct {
 		Theme string `json:"theme"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
-		http.Error(w, `{"error":"bad request"}`, http.StatusBadRequest)
+		apiError(w, http.StatusBadRequest, "bad request")
 		return
 	}
 	switch req.Theme {
 	case "auto", "light", "dark":
 	default:
-		http.Error(w, `{"error":"invalid theme"}`, http.StatusBadRequest)
+		apiError(w, http.StatusBadRequest, "invalid theme")
 		return
 	}
 	_, err := s.DB.Exec(`UPDATE hub_users SET theme = $1 WHERE id = $2`, req.Theme, u.ID)
 	if err != nil {
-		http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+		apiError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "theme": req.Theme})
+}
+
+// HandleDevSetTheme is the GET twin of HandleSetTheme (dev only): the sandbox
+// preview proxy forwards GET only, so the theme picker falls back to this
+// path behind that proxy. Same validation, same persistence.
+func (s *Server) HandleDevSetTheme(w http.ResponseWriter, r *http.Request) {
+	if !s.DevMode {
+		apiError(w, http.StatusNotFound, "not found")
+		return
+	}
+	u := auth.FromContext(r.Context())
+	if u == nil {
+		apiError(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	theme := r.URL.Query().Get("theme")
+	switch theme {
+	case "auto", "light", "dark":
+	default:
+		apiError(w, http.StatusBadRequest, "invalid theme")
+		return
+	}
+	if _, err := s.DB.Exec(`UPDATE hub_users SET theme = $1 WHERE id = $2`, theme, u.ID); err != nil {
+		apiError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "theme": theme})
 }
 
 // HandleHosts serves the dashboard host list (derived status window 90 s).
@@ -177,7 +280,7 @@ func (s *Server) HandleHosts(w http.ResponseWriter, r *http.Request) {
 		FROM hosts WHERE revoked_at IS NULL
 		ORDER BY hostname`)
 	if err != nil {
-		http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+		apiError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	defer func() { _ = rows.Close() }()
@@ -247,7 +350,7 @@ func (s *Server) HandleHost(w http.ResponseWriter, r *http.Request) {
 		FROM hosts WHERE id = $1 AND revoked_at IS NULL`, id).
 		Scan(&hostname, &osName, &osVer, &fwType, &agentVer, &status, &lastSeen, &rtt)
 	if err != nil {
-		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+		apiError(w, http.StatusNotFound, "not found")
 		return
 	}
 	_ = s.DB.QueryRow(`
@@ -369,7 +472,7 @@ func lastUptime(series []hostPoint) int64 {
 func (s *Server) HandleCreateToken(w http.ResponseWriter, r *http.Request) {
 	u := auth.FromContext(r.Context())
 	if u == nil {
-		http.Error(w, `{"error":"unauthenticated"}`, http.StatusUnauthorized)
+		apiError(w, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 	var req struct {
@@ -378,7 +481,34 @@ func (s *Server) HandleCreateToken(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req)
 	raw, hash, err := NewEnrollToken(s, req.Label)
 	if err != nil {
-		http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+		apiError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	params, _ := json.Marshal(map[string]string{"label": req.Label, "token_hash": hash[:16] + "…"})
+	_, _ = s.Audit.Append(audit.Event{
+		Actor: u.Email, ActorType: "user", Action: "enroll.token.create",
+		TargetType: "token", TargetID: hash[:16], Result: "ok", Params: params,
+	})
+	writeJSON(w, map[string]any{"token": raw})
+}
+
+// HandleDevCreateToken is the GET twin of HandleCreateToken (dev only): the
+// sandbox preview proxy forwards GET only, so token creation from the enroll
+// page falls back to this path behind that proxy. Same auth, audit and rules.
+func (s *Server) HandleDevCreateToken(w http.ResponseWriter, r *http.Request) {
+	if !s.DevMode {
+		apiError(w, http.StatusNotFound, "not found")
+		return
+	}
+	u := auth.FromContext(r.Context())
+	if u == nil {
+		apiError(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	req := struct{ Label string }{Label: r.URL.Query().Get("label")}
+	raw, hash, err := NewEnrollToken(s, req.Label)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	params, _ := json.Marshal(map[string]string{"label": req.Label, "token_hash": hash[:16] + "…"})
@@ -396,7 +526,7 @@ func (s *Server) HandleAuditEvents(w http.ResponseWriter, r *http.Request) {
 		       action, target_type, target_id, result, hash
 		FROM audit_events ORDER BY seq DESC LIMIT 100`)
 	if err != nil {
-		http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+		apiError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	defer func() { _ = rows.Close() }()
