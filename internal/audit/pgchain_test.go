@@ -31,9 +31,14 @@ func TestPGChainIntegrity(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = store.DB().Close() }()
 
-	// Clean slate for this test only (sequence reset included).
+	// Clean slate for this test only (sequence reset included) AND restore
+	// the slate afterwards: the tampering UPDATE below must not leak into
+	// the shared test database for other suites (hub/server e2e…).
 	_, err = store.DB().Exec(`TRUNCATE audit_events RESTART IDENTITY`)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = store.DB().Exec(`TRUNCATE audit_events RESTART IDENTITY`)
+	})
 
 	// Append through the Go store (which INSERTs; the DB trigger hashes).
 	e1, err := store.Append(Event{Actor: "admin@acme.fr", ActorType: "user",

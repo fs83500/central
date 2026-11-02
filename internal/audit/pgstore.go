@@ -45,12 +45,19 @@ func (s *PGStore) Append(ev Event) (Event, error) {
 			params = b
 		}
 	}
+	// ts: the DB DEFAULT now() is used unless the caller sets a real one.
+	// A zero time.Time must NEVER be inserted (it would serialize as
+	// 0001-01-01 and diverge from any later re-verification semantics).
+	var ts any
+	if !ev.TS.IsZero() {
+		ts = ev.TS
+	}
 	row := s.db.QueryRow(`
 		INSERT INTO audit_events (ts, actor, actor_type, action,
 		                          target_type, target_id, params, result)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES (COALESCE($1, now()), $2, $3, $4, $5, $6, $7, $8)
 		RETURNING seq, ts, prev_hash, hash`,
-		ev.TS, ev.Actor, ev.ActorType, ev.Action,
+		ts, ev.Actor, ev.ActorType, ev.Action,
 		ev.TargetType, ev.TargetID, params, ev.Result,
 	)
 	var out Event

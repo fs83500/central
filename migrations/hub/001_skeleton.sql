@@ -45,7 +45,12 @@ BEGIN
     -- serialize the writer: one append at a time (no chain fork)
     PERFORM pg_advisory_xact_lock(hashtext('ug_audit_chain'));
 
-    SELECT COALESCE(MAX(hash), '') INTO v_prev FROM audit_events;
+    -- chain on the LAST inserted row (highest seq), NOT MAX(hash):
+    -- MAX() is lexicographic on hex text and can pick an older row when
+    -- hashes sort lower, which would fork the chain.
+    SELECT COALESCE(
+        (SELECT hash FROM audit_events ORDER BY seq DESC LIMIT 1), ''
+    ) INTO v_prev;
 
     -- seq is taken from NEW (BIGSERIAL default), so no double-consumption
     v_canon := jsonb_build_object(
