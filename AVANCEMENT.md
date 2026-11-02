@@ -1,12 +1,46 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 J1 TERMINÉ + maquettes UI livrées — prochaine étape : J2 (dashboard réel)
+## Statut : 🎉 J2 (hub MVP + dashboard) EN COURS — auth + dashboard + thème livrés, non encore committés
 
-Dernière mise à jour : 2026-11-02 ~18h40
+Dernière mise à jour : 2026-11-02 ~19h15
 
 ## Tâche en cours
-- **Rien** — J1 et maquettes livrées. Prochain jalon : **J2 — hub MVP + dashboard**
-  (liste hosts, statut en ligne, audit UI, endpoints REST auth) selon PLAN-ATTAQUE.md §6.
+- **J2 en cours** (PLAN-ATTAQUE.md §6) : auth hub (login e-mail + MFA + sessions),
+  dashboard go:embed (5 pages), **thème clair/sombre/auto demandé par Fabien — TERMINÉ**.
+  Reste J2 : partitionnement télémétrie, page détail hôte finition, recette complète.
+
+## Thème clair/sombre/auto — livré (02/11 soir, demande Fabien)
+- **3 modes** : ☀ clair / ◐ auto (suit l'OS via `prefers-color-scheme`) / ☾ sombre,
+  sélecteur dans la topbar des 5 pages (`data-set-theme`).
+- **Persistance double** : `localStorage` (immédiate, machine) **ET profil utilisateur**
+  (`hub_users.theme`, colonne `003`, CHECK auto/light/dark) via `PATCH /api/v1/me/theme`
+  (validé côté serveur, 400 si invalide). Sur machine partagée, le thème du profil
+  serveur prime et re-synchronise le localStorage (`initThemeFromServer`).
+- **Anti-FOUC** : script inline dans chaque `<head>` applique le thème sauvegardé
+  avant la première peinture (pas de flash blanc en sombre).
+- **CSS par variables** (`app.css`) : palette claire + sombre, overrides manuels
+  `data-theme="light|dark"` prioritaires sur la media query. Bug corrigé : le sélecteur
+  `:root` nu dans la media query dark écrasait le choix manuel clair sur OS sombre.
+- **E2E puppeteer (DOM réel Chromium)** : auto suit l'OS ✔, manuel surpasse l'OS ✔,
+  persistance reload ✔, sync profil machine partagée ✔ (`ASSERT-SERVER-SYNC ok:true`).
+  Scripts conservés `.shots/theme-e2e.js` + `theme-profile-e2e.js` (hors git, à
+  reconvertir en test Go si besoin).
+
+## Correctifs audit chaîne N5 découverts en testant (02/11 soir)
+- **Fork lexicographique** : le trigger chaînait sur `MAX(hash)` — maximum TEXT
+  lexicographique, PAS le dernier row. Dès qu'un hash triait plus bas qu'un ancien
+  (vérifié en pratique : seq 3 < seq 2 → seq 4 re-chaînait sur seq 2 = FOURCHE,
+  chaîne cassée silencieusement). Fix : sous-SELECT scalaire `(SELECT hash …
+  ORDER BY seq DESC LIMIT 1)` + migration **004** pour les bases déjà déployées.
+- **Chaîne vide** : le premier `SELECT INTO` sans ligne laissait `v_prev=NULL`
+  (COALESCE jamais appliqué) → `prev_hash=NULL` → violation NOT NULL, INSERT
+  impossible sur table vide après TRUNCATE. Fixé pareil (004 + 001).
+- **ts zéro Go** : `PGStore.Append` insérait `time.Time{}` → `0001-01-01` en base
+  quand le code appelant ne remplit pas TS. Fix : `COALESCE($1, now())`.
+- **Test pgchain** laissait la base polluée (falsification non annulée) →
+  `t.Cleanup(TRUNCATE)` ajouté.
+- Vérifs : 40 events consécutifs → 0 fourche, `ug_audit_verify()`=true,
+  `/api/v1/audit/verify` ok, e2e 5 logins complets chaîne intacte.
 
 ## Maquettes UI — livrées (02/11 soir)
 - **6 pages HTML/CSS statiques** dans `docs/maquettes/` : données fictives, zéro JS,
