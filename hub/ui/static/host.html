@@ -37,6 +37,27 @@
       <div class="legend"><span><i style="background:var(--acc)"></i>CPU %</span><span><i style="background:var(--ok)"></i>RAM %</span><span><i style="background:var(--svg-grid)"></i>grille</span></div>
     </div>
     <div class="panel">
+      <h2>Disques — dernier point</h2>
+      <table>
+        <thead><tr><th>Périphérique</th><th>Point de montage</th><th>Total</th><th>Utilisé</th><th>%</th></tr></thead>
+        <tbody id="drows"></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Réseau — dernier point</h2>
+      <table>
+        <thead><tr><th>Interface</th><th>Reçu</th><th>Émis</th></tr></thead>
+        <tbody id="nrows"></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Services surveillés — dernier point</h2>
+      <table>
+        <thead><tr><th>Service</th><th>État</th></tr></thead>
+        <tbody id="srows"></tbody>
+      </table>
+    </div>
+    <div class="panel">
       <h2>Journal d'audit — cet hôte</h2>
       <table>
         <thead><tr><th>#</th><th>Horodatage</th><th>Acteur</th><th>Action</th><th>Résultat</th><th>Hash</th></tr></thead>
@@ -66,6 +87,18 @@ function sparkSVG(points, w, h, color) {
   </svg>`;
 }
 
+function fmtBytes(b) {
+  if (b == null) return '—';
+  const u = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return b.toFixed(b >= 100 || i === 0 ? 0 : 1) + ' ' + u[i];
+}
+function fmtUptime(s) {
+  if (!s) return '—';
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return (d ? d + ' j ' : '') + h + ' h ' + m + ' min';
+}
+
 async function refresh() {
   const r = await fetch('/api/v1/hosts/' + hostID);
   if (r.status === 401) { location.href = '/login'; return; }
@@ -77,10 +110,18 @@ async function refresh() {
     <div class="card"><div class="k">Statut</div><div class="v" style="font-size:18px"><span class="chip ${h.status === 'online' ? 'ok' : (h.status === 'stale' ? 'warn' : 'off')}">${esc(h.status)}</span></div><div class="d">vu ${esc(h.last_seen || 'jamais')}</div></div>
     <div class="card"><div class="k">CPU</div><div class="v">${h.cpu_pct != null ? h.cpu_pct.toFixed(0) + '%' : '—'}</div><div class="d">dernier point</div></div>
     <div class="card"><div class="k">RAM</div><div class="v">${h.mem_pct != null ? h.mem_pct.toFixed(0) + '%' : '—'}</div><div class="d">dernier point</div></div>
-    <div class="card"><div class="k">Charge</div><div class="v">${h.load1 != null ? h.load1.toFixed(2) : '—'}</div><div class="d">load1</div></div>`;
+    <div class="card"><div class="k">Charge</div><div class="v">${h.load1 != null ? h.load1.toFixed(2) : '—'}</div><div class="d">load1 · up ${esc(fmtUptime(h.uptime_s))}</div></div>`;
   document.getElementById('chart').innerHTML =
     '<h2>CPU 24 h</h2>' + sparkSVG(h.telemetry.map((t) => t.cpu_pct), 720, 120, 'var(--acc)') +
     '<h2 style="margin-top:14px">RAM 24 h</h2>' + sparkSVG(h.telemetry.map((t) => t.mem_pct), 720, 120, 'var(--ok)');
+  document.getElementById('drows').innerHTML = (h.disks || []).map((d) => `
+    <tr><td class="mono">${esc(d.device)}</td><td class="mono">${esc(d.mount)}</td>
+    <td>${fmtBytes(d.total_bytes)}</td><td>${fmtBytes(d.used_bytes)}</td>
+    <td><span class="chip ${d.used_pct > 85 ? 'crit' : (d.used_pct > 70 ? 'warn' : 'ok')}">${d.used_pct.toFixed(0)}%</span></td></tr>`).join('') || '<tr><td colspan="5" class="sub">Pas encore de données.</td></tr>';
+  document.getElementById('nrows').innerHTML = (h.net || []).map((n) => `
+    <tr><td class="mono">${esc(n.iface)}</td><td>${fmtBytes(n.bytes_in)}</td><td>${fmtBytes(n.bytes_out)}</td></tr>`).join('') || '<tr><td colspan="3" class="sub">Pas encore de données.</td></tr>';
+  document.getElementById('srows').innerHTML = (h.services || []).map((s) => `
+    <tr><td class="mono">${esc(s.name)}</td><td><span class="chip ${s.status === 'running' ? 'ok' : 'crit'}">${esc(s.status)}</span></td></tr>`).join('') || '<tr><td colspan="2" class="sub">Pas encore de données.</td></tr>';
   document.getElementById('arows').innerHTML = (h.audit || []).map((a) => `
     <tr><td class="mono">${a.seq}</td><td class="mono">${esc(a.ts)}</td><td class="mono">${esc(a.actor)}</td><td>${esc(a.action)}</td>
     <td><span class="chip ${a.result === 'ok' ? 'ok' : 'crit'}">${esc(a.result)}</span></td><td class="mono">${esc((a.hash || '').slice(0, 12))}…</td></tr>`).join('');

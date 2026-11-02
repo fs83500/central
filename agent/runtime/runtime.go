@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"git.dpnac.cloud/dpnac/central/agent/enroll"
@@ -79,7 +80,11 @@ func Run(ctx context.Context, id *enroll.Identity, cfg Config) error {
 // runOnce is one connection session.
 func runOnce(ctx context.Context, id *enroll.Identity, core protocol.HostCore, hb, tel, inv time.Duration) error {
 	dialer := wsDialer(id)
-	wsURL := id.HubURL + "/agent/v1/ws"
+	// gorilla expects ws:// or wss://: normalize http(s):// from the
+	// enrollment (identity.json stores the hub base URL as given).
+	wsURL := strings.Replace(id.HubURL, "http://", "ws://", 1)
+	wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
+	wsURL += "/agent/v1/ws"
 	ws, resp, err := dialer.Dial(wsURL, nil) // #nosec G115
 	if err != nil {
 		if resp != nil {

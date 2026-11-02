@@ -5,10 +5,15 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"git.dpnac.cloud/dpnac/central/hub/auth"
@@ -40,14 +45,44 @@ func main() {
 		if auditStore, err = audit.NewPGStore(dsn); err != nil {
 			log.Fatalf("hub: audit store: %v", err)
 		}
-		// The internal CA is persisted on the volume; J1/J2 keep it in-memory
-		// per process (prod persistence arrives with the keys volume).
-		if ca, err = cryptoutil.NewInternalCA("unifiedguard-hub-ca", time.Now().UnixNano()); err != nil {
+		// The internal CA is persisted on the volume when HUB_CA_DIR is set
+		// (dev/demo); in-memory per process otherwise (prod keys volume: J10).
+		caDir := getenv("HUB_CA_DIR", "")
+		if caDir != "" {
+			if ca, err = cryptoutil.LoadOrCreateCA(caDir, "unifiedguard-hub-ca"); err != nil {
+				log.Fatalf("hub: CA: %v", err)
+			}
+		} else if ca, err = cryptoutil.NewInternalCA("unifiedguard-hub-ca", time.Now().UnixNano()); err != nil {
 			log.Fatalf("hub: CA: %v", err)
 		}
 	}
 
 	srvHub := &server.Server{DB: db, CA: ca, Audit: auditStore, Domain: domain, Quota: 5, DevMode: dev}
+
+	// Standalone-TLS mode: trust agent certs signed by the internal CA.
+	var clientCAs *x509.CertPool
+	if ca != nil {
+		clientCAs = x509.NewCertPool()
+		clientCAs.AddCert(ca.Cert)
+	}
+
+	// Monthly telemetry partitions (migration 005): create current + next
+	// month BEFORE serving agents, then keep them rolling every day.
+	if db != nil {
+		if err := srvHub.EnsureTelemetryPartitions(); err != nil {
+			log.Fatalf("hub: telemetry partitions: %v", err)
+		}
+		go srvHub.RetentionLoop(make(chan struct{}))
+	}
+
+	// HUB_DEV_TLS=1: generate a server cert signed by the internal CA and
+	// write it to the TLS dir (default /tmp/hub-tls) so the agent mTLS path
+	// works without Caddy in dev/review setups.
+	if os.Getenv("HUB_DEV_TLS") == "1" && ca != nil {
+		if err := writeDevTLSCert(ca, domain); err != nil {
+			log.Fatalf("hub: dev tls: %v", err)
+		}
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -132,10 +167,54 @@ func main() {
 		}
 	}
 
-	httpSrv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	// HUB_DEV_UI_LISTEN: dev-only second listener for the dashboard (plain
+	// HTTP) so the UI is reachable through a sandbox preview proxy while the
+	// main listener keeps agent mTLS traffic. NEVER set in production.
+	if uiAddr := getenv("HUB_DEV_UI_LISTEN", ""); uiAddr != "" && dev {
+		uiSrv := &http.Server{Addr: uiAddr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+		go func() {
+			log.Printf("hub: dev UI (HTTP) listening on %s", uiAddr)
+			if err := uiSrv.ListenAndServe(); err != http.ErrServerClosed {
+				log.Fatal(err)
+			}
+		}()
+	}
+
+	httpSrv := &http.Server{
+		Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second,
+	}
 	log.Printf("hub %s listening on %s (J2) — domain %s dev=%v", version.String(), addr, domain, dev)
+	// Optional TLS (dev/self-signed or behind no reverse proxy): enables the
+	// agent mTLS path (wss:// + client cert) that production uses via Caddy.
+	if cert, key := os.Getenv("HUB_TLS_CERT"), os.Getenv("HUB_TLS_KEY"); cert != "" && key != "" {
+		log.Printf("hub: TLS enabled (cert %s, agent mTLS %v)", cert, clientCAs != nil)
+		httpSrv.TLSConfig = tlsConfig(clientCAs)
+		if err := httpSrv.ListenAndServeTLS(cert, key); err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+		return
+	}
+	if os.Getenv("HUB_DEV_TLS") == "1" {
+		log.Printf("hub: TLS enabled (dev cert, agent mTLS)")
+		httpSrv.TLSConfig = tlsConfig(clientCAs)
+		if err := httpSrv.ListenAndServeTLS(filepath.Join(tlsDir(), "hub.crt"), filepath.Join(tlsDir(), "hub.key")); err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+		return
+	}
 	if err := httpSrv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)
+	}
+}
+
+// tlsConfig enables agent mTLS when the hub runs standalone TLS (no Caddy):
+// browsers still work (client certs are REQUESTED, not required) while
+// agents present their enrolled certificate directly.
+func tlsConfig(clientCAs *x509.CertPool) *tls.Config {
+	return &tls.Config{
+		ClientAuth: tls.RequestClientCert,
+		ClientCAs:  clientCAs,
+		MinVersion: tls.VersionTLS12,
 	}
 }
 
@@ -155,6 +234,47 @@ func getenv(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// tlsDir is where HUB_DEV_TLS=1 writes the self-signed cert/key.
+func tlsDir() string {
+	if d := os.Getenv("HUB_TLS_DIR"); d != "" {
+		return d
+	}
+	return "/tmp/hub-tls"
+}
+
+// writeDevTLSCert signs a TLS server cert with the hub internal CA: agents
+// already trust that CA (returned at enrollment), so wss:// + mTLS works in
+// dev without a reverse proxy.
+func writeDevTLSCert(ca *cryptoutil.InternalCA, domain string) error {
+	dir := tlsDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("mkdir: %w", err)
+	}
+	key, err := cryptoutil.NewAgentKey()
+	if err != nil {
+		return fmt.Errorf("keygen: %w", err)
+	}
+	certPEM, err := ca.SignHubCert(key, []string{"localhost", "127.0.0.1", domain}, time.Now().UnixNano())
+	if err != nil {
+		return fmt.Errorf("sign: %w", err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return fmt.Errorf("marshal key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	certPath := filepath.Join(dir, "hub.crt")
+	keyPath := filepath.Join(dir, "hub.key")
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		return fmt.Errorf("write cert: %w", err)
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		return fmt.Errorf("write key: %w", err)
+	}
+	log.Printf("hub: dev TLS cert ready: %s (agents trust the hub CA)", certPath)
+	return nil
 }
 
 func mustCreateToken(s *server.Server) string {

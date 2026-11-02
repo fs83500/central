@@ -13,6 +13,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -73,6 +76,51 @@ func NewInternalCA(cn string, serial int64) (*InternalCA, error) {
 	}, nil
 }
 
+// LoadOrCreateCA loads the internal CA from dir (ca.key + ca.crt, 0600) or
+// creates it and persists it there. Dev/demo helper (HUB_CA_DIR): keeps agent
+// identities valid across hub restarts. The volume-backed production
+// persistence arrives with the keys volume (J10).
+func LoadOrCreateCA(dir, cn string) (*InternalCA, error) {
+	keyPath := filepath.Join(dir, "ca.key")
+	certPath := filepath.Join(dir, "ca.crt")
+	keyRaw, errKey := os.ReadFile(keyPath)    //nolint:gosec // fixed path built from dir
+	certRaw, errCert := os.ReadFile(certPath) //nolint:gosec // idem
+	if errKey == nil && errCert == nil {
+		keyBlock, _ := pem.Decode(keyRaw)
+		certBlock, _ := pem.Decode(certRaw)
+		if keyBlock == nil || certBlock == nil {
+			return nil, fmt.Errorf("cryptoutil: %s: invalid PEM", dir)
+		}
+		key, err := x509.ParseECPrivateKey(keyBlock.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("cryptoutil: parse CA key: %w", err)
+		}
+		cert, err := x509.ParseCertificate(certBlock.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("cryptoutil: parse CA cert: %w", err)
+		}
+		return &InternalCA{Key: key, Cert: cert, CertPEM: certRaw}, nil
+	}
+	ca, err := NewInternalCA(cn, time.Now().UnixNano())
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	keyDER, err := x509.MarshalECPrivateKey(ca.Key)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(certPath, ca.CertPEM, 0o644); err != nil {
+		return nil, err
+	}
+	return ca, nil
+}
+
 // SignAgentCert signs the CSR of an enrolling agent. serial and agentID are
 // attributed by the hub (agent UUID); revocation is tracked by serial.
 func (ca *InternalCA) SignAgentCert(csrPEM []byte, agentID string, serial int64) ([]byte, error) {
@@ -104,6 +152,39 @@ func (ca *InternalCA) SignAgentCert(csrPEM []byte, agentID string, serial int64)
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.Cert, csr.PublicKey, ca.Key)
 	if err != nil {
 		return nil, err
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), nil
+}
+
+// SignHubCert signs the hub's own TLS server certificate with the internal
+// CA. Used in dev/standalone mode (no reverse proxy): the agent trust store
+// only contains the hub CA, so the server cert must chain to it too.
+func (ca *InternalCA) SignHubCert(key *ecdsa.PrivateKey, names []string, serial int64) ([]byte, error) {
+	serialBig := big.NewInt(serial)
+	tmpl := &x509.Certificate{
+		SerialNumber: serialBig,
+		Subject:      pkix.Name{CommonName: names[0]},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().AddDate(2, 0, 0),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     names,
+	}
+	// IP entries must go to IPAddresses (x509 requires it).
+	ips := []net.IP{}
+	dnsOnly := []string{}
+	for _, n := range names {
+		if ip := net.ParseIP(n); ip != nil {
+			ips = append(ips, ip)
+		} else {
+			dnsOnly = append(dnsOnly, n)
+		}
+	}
+	tmpl.DNSNames = dnsOnly
+	tmpl.IPAddresses = ips
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.Cert, &key.PublicKey, ca.Key)
+	if err != nil {
+		return nil, fmt.Errorf("cryptoutil: sign hub cert: %w", err)
 	}
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), nil
 }

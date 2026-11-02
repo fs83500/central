@@ -82,9 +82,12 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
 		return
 	}
-	// J2: SMTP pluggable (J9); in dev the code is logged and returned.
+	// J2: SMTP pluggable (J9); in dev the code is logged and returned so the
+	// dashboard is testable without a mail server (NEVER set in production).
 	if s.DevMode {
 		s.logDevMFA(req.Email, code)
+		writeJSON(w, map[string]any{"mfa_required": true, "dev_mfa_code": code})
+		return
 	}
 	s.auditUser(req.Email, "login.step1", "ok", req.Email, `{}`)
 	writeJSON(w, map[string]any{"mfa_required": true})
@@ -217,6 +220,18 @@ func (s *Server) HandleHosts(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleHost serves one host with its last telemetry + host audit events.
+// hostPoint is one sampled 24h telemetry point (full snapshot per point).
+type hostPoint struct {
+	TS     string  `json:"ts"`
+	CPU    float64 `json:"cpu_pct"`
+	Mem    float64 `json:"mem_pct"`
+	Load1  float64 `json:"load1"`
+	Uptime int64   `json:"uptime_s"`
+	Disks  []any   `json:"disks"`
+	Net    []any   `json:"net"`
+	Svc    []any   `json:"services"`
+}
+
 func (s *Server) HandleHost(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var (
@@ -241,24 +256,23 @@ func (s *Server) HandleHost(w http.ResponseWriter, r *http.Request) {
 
 	// 24h telemetry series (sampled ≤ 200 points).
 	tRows, err := s.DB.Query(`
-		SELECT ts, cpu_pct, mem_pct FROM telemetry
+		SELECT ts, cpu_pct, mem_pct, load1, uptime_s, disks, net, services FROM telemetry
 		WHERE host_id = $1 AND ts > now() - interval '24 hours'
 		ORDER BY ts`, id)
 	if err == nil {
 		defer func() { _ = tRows.Close() }()
 	}
-	type point struct {
-		TS  string  `json:"ts"`
-		CPU float64 `json:"cpu_pct"`
-		Mem float64 `json:"mem_pct"`
-	}
-	series := []point{}
+	series := []hostPoint{}
 	if tRows != nil {
 		for tRows.Next() {
-			var p point
+			var p hostPoint
 			var ts time.Time
-			if err := tRows.Scan(&ts, &p.CPU, &p.Mem); err == nil {
+			var disks, net, svc []byte
+			if err := tRows.Scan(&ts, &p.CPU, &p.Mem, &p.Load1, &p.Uptime, &disks, &net, &svc); err == nil {
 				p.TS = ts.UTC().Format(time.RFC3339)
+				_ = json.Unmarshal(disks, &p.Disks)
+				_ = json.Unmarshal(net, &p.Net)
+				_ = json.Unmarshal(svc, &p.Svc)
 				series = append(series, p)
 			}
 		}
@@ -266,7 +280,7 @@ func (s *Server) HandleHost(w http.ResponseWriter, r *http.Request) {
 	// Sample down to ≤ 200 points for the sparkline.
 	if len(series) > 200 {
 		step := len(series) / 200
-		sampled := make([]point, 0, 200)
+		sampled := make([]hostPoint, 0, 200)
 		for i := 0; i < len(series); i += step {
 			sampled = append(sampled, series[i])
 		}
@@ -304,7 +318,50 @@ func (s *Server) HandleHost(w http.ResponseWriter, r *http.Request) {
 		"status": status, "last_seen": lastSeen, "rtt_ms": rtt,
 		"cpu_pct": cpu, "mem_pct": mem, "load1": load,
 		"telemetry": series, "audit": events,
+		// Last full snapshot: disks / network / services (finition J2).
+		"disks":    lastDisks(series),
+		"net":      lastNet(series),
+		"services": lastServices(series),
+		"uptime_s": lastUptime(series),
 	})
+}
+
+// lastDisks returns the last non-empty disks snapshot (newest first).
+func lastDisks(series []hostPoint) []any {
+	for i := len(series) - 1; i >= 0; i-- {
+		if len(series[i].Disks) > 0 {
+			return series[i].Disks
+		}
+	}
+	return []any{}
+}
+
+// lastNet returns the last non-empty network snapshot (newest first).
+func lastNet(series []hostPoint) []any {
+	for i := len(series) - 1; i >= 0; i-- {
+		if len(series[i].Net) > 0 {
+			return series[i].Net
+		}
+	}
+	return []any{}
+}
+
+// lastServices returns the last non-empty services snapshot (newest first).
+func lastServices(series []hostPoint) []any {
+	for i := len(series) - 1; i >= 0; i-- {
+		if len(series[i].Svc) > 0 {
+			return series[i].Svc
+		}
+	}
+	return []any{}
+}
+
+// lastUptime returns the uptime of the newest point (0 when no telemetry).
+func lastUptime(series []hostPoint) int64 {
+	if len(series) == 0 {
+		return 0
+	}
+	return series[len(series)-1].Uptime
 }
 
 // HandleCreateToken creates an enrollment token from the dashboard (SPEC

@@ -55,6 +55,12 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     document.getElementById('login-form').hidden = true;
     document.getElementById('mfa-form').hidden = false;
     document.getElementById('code').focus();
+    if (data.dev_mfa_code) {
+      const hint = document.createElement('p');
+      hint.className = 'sub';
+      hint.innerHTML = 'Code dev (SMTP arrive en J9) : <b style="letter-spacing:2px;font-size:16px">' + data.dev_mfa_code + '</b>';
+      document.getElementById('mfa-form').prepend(hint);
+    }
     return;
   }
   if (status === 200 && data.ok) { location.href = '/hosts'; return; }

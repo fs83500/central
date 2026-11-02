@@ -10,3 +10,5 @@ coverage.*
 
 # OS
 .DS_Store
+# Dev screenshots / E2E artifacts
+.shots/

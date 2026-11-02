@@ -9,6 +9,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
@@ -96,7 +97,17 @@ func Enroll(hubURL, token, stateDir string, core protocol.HostCore) (*Identity, 
 		HostCore: core,
 	})
 	url := hubURL + "/api/v1/enroll"
+	// The agent cannot know the hub CA BEFORE enrollment (it receives it in
+	// the response). In production the hub TLS cert is public (Let's Encrypt
+	// behind Caddy). For dev/self-signed hubs, UG_ENROLL_INSECURE=1 skips
+	// verification for the enrollment POST ONLY — the WebSocket afterwards
+	// always verifies the full chain (CAPool from the enrollment response).
 	client := &http.Client{Timeout: 30 * time.Second}
+	if os.Getenv("UG_ENROLL_INSECURE") == "1" {
+		client.Transport = &http.Transport{ //nolint:gosec // explicit opt-in dev flag
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // dev only
+		}
+	}
 	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("enroll: post: %w", err)
