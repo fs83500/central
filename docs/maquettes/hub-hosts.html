@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hôtes — central.acme.fr</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">Unified<span>Guard</span>.cloud</div>
+  <div class="site">central.acme.fr</div>
+  <div class="spacer"></div>
+  <div class="user">admin@acme.fr · <a href="hub-login.html" style="color:#93c5fd;">déconnexion</a></div>
+</div>
+<div class="shell">
+  <div class="sidenav">
+    <div class="grp">Surveillance</div>
+    <a class="on" href="#">Hôtes</a>
+    <a href="#">Groupes</a>
+    <a href="#">Alertes</a>
+    <div class="grp">Maintenance</div>
+    <a href="#">Fenêtres</a>
+    <a href="#">Campagnes</a>
+    <div class="grp">Administration</div>
+    <a href="#">Audit</a>
+    <a href="hub-enroll.html">Enrollment</a>
+    <a href="#">Comptes</a>
+  </div>
+  <div class="main">
+    <h1>Hôtes</h1>
+    <p class="sub">4 appareils protégés · plan 5 · dernière activité il y a 12 s</p>
+
+    <div class="cards">
+      <div class="card ok"><div class="k">En ligne</div><div class="v">3/4</div><div class="d">heartbeat 30 s</div></div>
+      <div class="card warn"><div class="k">MAJ en attente</div><div class="v">9</div><div class="d">sur 2 hôtes</div></div>
+      <div class="card"><div class="k">Pare-feux actifs</div><div class="v">4/4</div><div class="d">nftables ×2 · ufw ×1 · firewalld ×1</div></div>
+      <div class="card crit"><div class="k">Actions en file</div><div class="v">2</div><div class="d">en attente de reconnexion</div></div>
+      <div class="card"><div class="k">Dernier audit</div><div class="v">OK</div><div class="d">chaîne intègre · 17 406 events</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Appareils</h2>
+      <table>
+        <thead><tr><th>Hôte</th><th>Statut</th><th>Système</th><th>Firewall</th><th>MAJ</th><th>CPU</th><th>RAM</th><th>Dernier contact</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><a href="hub-host.html"><b>srv-web-01</b></a><br><span class="mono" style="color:var(--mut);">debian12 · web</span></td>
+            <td><span class="chip ok">● en ligne</span></td>
+            <td>Debian 12</td>
+            <td><span class="chip info">nftables</span></td>
+            <td><span class="chip warn">6 MAJ</span></td>
+            <td>12 %</td>
+            <td>38 %</td>
+            <td>il y a 12 s</td>
+          </tr>
+          <tr>
+            <td><a href="hub-host.html"><b>srv-db-01</b></a><br><span class="mono" style="color:var(--mut);">debian12 · prod</span></td>
+            <td><span class="chip ok">● en ligne</span></td>
+            <td>Debian 12</td>
+            <td><span class="chip info">nftables</span></td>
+            <td><span class="chip ok">à jour</span></td>
+            <td>7 %</td>
+            <td>61 %</td>
+            <td>il y a 25 s</td>
+          </tr>
+          <tr>
+            <td><a href="hub-host.html"><b>ws-compta-3</b></a><br><span class="mono" style="color:var(--mut);">win11 · poste</span></td>
+            <td><span class="chip ok">● en ligne</span></td>
+            <td>Windows 11</td>
+            <td><span class="chip info">Defender FW</span></td>
+            <td><span class="chip warn">3 MAJ</span></td>
+            <td>4 %</td>
+            <td>47 %</td>
+            <td>il y a 31 s</td>
+          </tr>
+          <tr>
+            <td><a href="hub-host.html"><b>srv-backup-01</b></a><br><span class="mono" style="color:var(--mut);">ubuntu24 · infra</span></td>
+            <td><span class="chip off">● hors ligne</span></td>
+            <td>Ubuntu 24.04</td>
+            <td><span class="chip info">ufw</span></td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>il y a 4 h 12 min</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h2>File d'actions (2)</h2>
+        <table>
+          <tr><td><span class="chip warn">⏳ en attente</span></td><td class="mono">update_packages</td><td>srv-backup-01</td><td>il y a 4 h</td></tr>
+          <tr><td><span class="chip warn">⏳ en attente</span></td><td class="mono">fw_apply</td><td>srv-backup-01</td><td>il y a 3 h</td></tr>
+        </table>
+        <p class="sub" style="margin:8px 0 0;">Les actions sur hôtes hors ligne attendent la reconnexion (J3).</p>
+      </div>
+      <div class="panel">
+        <h2>Journal d'audit — 3 derniers</h2>
+        <table>
+          <tr><td class="mono">17:04:12</td><td><span class="chip ok">login</span></td><td>admin@acme.fr</td></tr>
+          <tr><td class="mono">16:58:03</td><td><span class="chip info">host.add</span></td><td>ws-compta-3</td></tr>
+          <tr><td class="mono">16:44:37</td><td><span class="chip info">fw.snapshot</span></td><td>srv-web-01</td></tr>
+        </table>
+        <p class="sub" style="margin:8px 0 0;">Chaîne SHA-256 vérifiable (N5) · <a href="#">voir tout</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enrollment — central.acme.fr</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">Unified<span>Guard</span>.cloud</div>
+  <div class="site">central.acme.fr</div>
+  <div class="spacer"></div>
+  <div class="user">admin@acme.fr · <a href="hub-login.html" style="color:#93c5fd;">déconnexion</a></div>
+</div>
+<div class="shell">
+  <div class="sidenav">
+    <div class="grp">Surveillance</div>
+    <a href="hub-hosts.html">Hôtes</a>
+    <a href="#">Groupes</a>
+    <a href="#">Alertes</a>
+    <div class="grp">Maintenance</div>
+    <a href="#">Fenêtres</a>
+    <a href="#">Campagnes</a>
+    <div class="grp">Administration</div>
+    <a href="#">Audit</a>
+    <a class="on" href="#">Enrollment</a>
+    <a href="#">Comptes</a>
+  </div>
+  <div class="main">
+    <h1>Enrollment</h1>
+    <p class="sub">Ajouter un appareil : crée un token à usage unique (TTL 24 h), puis exécute le one-liner sur la machine.</p>
+
+    <div class="okline">✅ Token créé : <b>ug-9f3a…d2c4</b> — expire dans 23 h 59 min, affiché une seule fois (stocké hashé SHA-256 côté serveur).</div>
+
+    <div class="panel">
+      <h2>Installation en une commande</h2>
+      <p class="sub" style="margin-bottom:10px;">Sur la machine cible (Debian/Ubuntu, root ou sudo) :</p>
+      <code class="cmd">curl -fsSL https://central.acme.fr/install.sh | bash -s -- --token=ug-9f3a2b7c4d1e8f6a0b3c5d7e9f1a2b3c</code>
+      <p style="margin-top:10px;"><button class="btn small">📋 Copier</button> <button class="btn sec small">Télécharger l'agent (paquet signé)</button></p>
+      <p class="sub" style="margin-top:8px;">Vérification : manifest Ed25519 + signature · la machine enverra une CSR, le hub signera le certificat mTLS.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Tokens actifs</h2>
+      <table>
+        <thead><tr><th>Token</th><th>Créé</th><th>Expire</th><th>Statut</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">ug-9f3a…d2c4</td><td class="mono">il y a 1 min</td><td class="mono">dans 23 h 59 min</td><td><span class="chip ok">valide</span></td><td><a href="#">révoquer</a></td></tr>
+          <tr><td class="mono">ug-71cc…a90b</td><td class="mono">hier 18:20</td><td class="mono">expiré</td><td><span class="chip off">expiré</span></td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Comment ça marche</h2>
+      <p class="sub">1. Le hub génère un token <b>à usage unique</b> (usage atomique anti-rejeu). 2. L'agent s'installe, génère sa clé <b>ECDSA P-256 localement</b>, envoie sa CSR signée par la CA interne. 3. Connexion permanente en mTLS — l'appareil n'ouvre <b>aucun port</b> (règle d'or des flux).</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

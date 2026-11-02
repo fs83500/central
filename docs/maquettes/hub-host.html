@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>srv-web-01 — central.acme.fr</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">Unified<span>Guard</span>.cloud</div>
+  <div class="site">central.acme.fr</div>
+  <div class="spacer"></div>
+  <div class="user">admin@acme.fr · <a href="hub-login.html" style="color:#93c5fd;">déconnexion</a></div>
+</div>
+<div class="shell">
+  <div class="sidenav">
+    <div class="grp">Surveillance</div>
+    <a class="on" href="hub-hosts.html">Hôtes</a>
+    <a href="#">Groupes</a>
+    <a href="#">Alertes</a>
+    <div class="grp">Maintenance</div>
+    <a href="#">Fenêtres</a>
+    <a href="#">Campagnes</a>
+    <div class="grp">Administration</div>
+    <a href="#">Audit</a>
+    <a href="hub-enroll.html">Enrollment</a>
+    <a href="#">Comptes</a>
+  </div>
+  <div class="main">
+    <a class="back" href="hub-hosts.html">← Hôtes</a>
+    <h1>srv-web-01 <span class="chip ok">● en ligne</span></h1>
+    <p class="sub">debian12 · groupe « web » · RTT 18 ms · agent v0.1.0 · connecté depuis 14 h 03</p>
+
+    <div class="cards">
+      <div class="card"><div class="k">CPU</div><div class="v">12 %</div><div class="d">8 cœurs · load 0.4</div></div>
+      <div class="card"><div class="k">RAM</div><div class="v">38 %</div><div class="d">15,2 / 32 Go</div></div>
+      <div class="card"><div class="k">Disque /</div><div class="v">71 %</div><div class="d">345 / 512 Go</div></div>
+      <div class="card"><div class="k">Latence</div><div class="v">18 ms</div><div class="d">ping applicatif (J3)</div></div>
+      <div class="card warn"><div class="k">MAJ en attente</div><div class="v">6</div><div class="d">2 sécurité</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Télémétrie — 24 h</h2>
+      <svg viewBox="0 0 700 140" width="100%" height="140" role="img" aria-label="Courbes CPU et RAM sur 24 heures">
+        <defs>
+          <linearGradient id="gcpu" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2563eb" stop-opacity=".25"/><stop offset="1" stop-color="#2563eb" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <rect x="40" y="10" width="640" height="110" fill="none" stroke="#e3e8ef"/>
+        <g stroke="#eef1f5"><line x1="40" y1="37.5" x2="680" y2="37.5"/><line x1="40" y1="65" x2="680" y2="65"/><line x1="40" y1="92.5" x2="680" y2="92.5"/></g>
+        <text x="10" y="17" font-size="9" fill="#64748b">100%</text>
+        <text x="16" y="68" font-size="9" fill="#64748b">50%</text>
+        <text x="20" y="119" font-size="9" fill="#64748b">0%</text>
+        <polygon fill="url(#gcpu)" points="40,96 70,94 100,99 130,95 160,92 190,97 220,93 250,88 280,93 310,91 340,86 370,90 400,84 430,89 460,95 490,91 520,87 550,92 580,89 610,94 640,91 680,95 680,120 40,120"/>
+        <polyline fill="none" stroke="#2563eb" stroke-width="2" points="40,96 70,94 100,99 130,95 160,92 190,97 220,93 250,88 280,93 310,91 340,86 370,90 400,84 430,89 460,95 490,91 520,87 550,92 580,89 610,94 640,91 680,95"/>
+        <polyline fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="4 3" points="40,78 70,77 100,79 130,76 160,75 190,77 220,74 250,73 280,75 310,72 340,71 370,73 400,70 430,71 460,73 490,72 520,70 550,71 580,70 610,72 640,71 680,73"/>
+        <g font-size="9" fill="#64748b"><text x="40" y="135">-24 h</text><text x="200" y="135">-18 h</text><text x="360" y="135">-12 h</text><text x="520" y="135">-6 h</text><text x="660" y="135">now</text></g>
+        <g font-size="10"><circle cx="520" cy="87" r="3" fill="#2563eb"/><text x="528" y="84" fill="#2563eb">CPU</text><circle cx="520" cy="102" r="3" fill="#16a34a"/><text x="528" y="106" fill="#16a34a">RAM</text></g>
+      </svg>
+      <p class="sub" style="margin:6px 0 0;">Points toutes les 5 min · partition mensuelle en base</p>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h2>Pare-feu — nftables</h2>
+        <dl class="kv">
+          <dt>Backend</dt><dd>nftables (détection auto)</dd>
+          <dt>Statut</dt><dd><span class="chip ok">actif</span></dd>
+          <dt>Snapshot</dt><dd><span class="chip info">chiffré</span> 2 141 octets · il y a 2 j</dd>
+          <dt>Clé de site</dt><dd>🔒 déchiffrable uniquement par le site</dd>
+          <dt>Dernière modification</dt><dd>16:44 — admin (audit #17 405)</dd>
+        </dl>
+        <p style="margin-top:12px;">
+          <button class="btn sec small">Voir le diff (N2)</button>
+          <button class="btn sec small">Restaurer le snapshot</button>
+          <button class="btn small">Appliquer (commit-confirm)</button>
+        </p>
+      </div>
+      <div class="panel">
+        <h2>Mises à jour (6)</h2>
+        <table>
+          <tr><td class="mono">libssl3</td><td><span class="chip crit">sécurité</span></td><td>3.0.13 → 3.0.15</td></tr>
+          <tr><td class="mono">openssl</td><td><span class="chip crit">sécurité</span></td><td>3.0.13 → 3.0.15</td></tr>
+          <tr><td class="mono">nginx</td><td>—</td><td>1.22.1 → 1.22.1-9+deb12</td></tr>
+          <tr><td class="mono">curl</td><td>—</td><td>7.88 → 7.88.1</td></tr>
+        </table>
+        <p style="margin-top:12px;"><button class="btn small">Simuler le plan</button> <button class="btn sec small">MAJ tout</button></p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Journal d'audit — 5 derniers</h2>
+      <table>
+        <thead><tr><th>Heure</th><th>Action</th><th>Acteur</th><th>Résultat</th><th>Hash</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">17:02:44</td><td><span class="chip info">telemetry.ingest</span></td><td>agent:srv-web-01</td><td>ok</td><td class="mono">a91f…c2</td></tr>
+          <tr><td class="mono">16:58:03</td><td><span class="chip info">host.add</span></td><td>agent:srv-web-01</td><td>ok</td><td class="mono">d402…7b</td></tr>
+          <tr><td class="mono">16:44:37</td><td><span class="chip info">fw.snapshot</span></td><td>admin@acme.fr</td><td>ok</td><td class="mono">e7c1…09</td></tr>
+          <tr><td class="mono">16:12:10</td><td><span class="chip info">login</span></td><td>admin@acme.fr</td><td>ok</td><td class="mono">3af0…44</td></tr>
+          <tr><td class="mono">15:30:00</td><td><span class="chip info">update_packages</span></td><td>admin@acme.fr</td><td>ok</td><td class="mono">8b2e…d1</td></tr>
+        </tbody>
+      </table>
+      <p class="sub" style="margin:8px 0 0;">Chaîne N5 : chaque entrée scelle la précédente (SHA-256) · <a href="#">vérifier l'intégrité</a></p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

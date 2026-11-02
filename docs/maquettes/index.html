@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UnifiedGuard — Maquettes</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">Unified<span>Guard</span>.cloud</div>
+  <div class="site">maquettes statiques · données fictives</div>
+</div>
+<div class="main" style="margin: 0 auto;">
+  <h1>Maquettes — aperçu des écrans</h1>
+  <p class="sub">Écrans cliquables, rendu final approximatif. Le dashboard réel est servi par la centrale (go:embed, zéro npm) dès le jalon <b>J2</b>.</p>
+
+  <div class="panel">
+    <h2>Centrale locale — central.&lt;domaine-client&gt;</h2>
+    <table>
+      <tr><td style="width:220px;"><a href="hub-login.html">🔐 Connexion</a></td><td>E-mail + mot de passe (Argon2id), puis code MFA envoyé par e-mail. Double opt-in à l'inscription.</td></tr>
+      <tr><td><a href="hub-hosts.html">🖥️ Dashboard / Hosts</a></td><td>Vue principale : hôtes en ligne, KPIs, type de pare-feu, MAJ en attente, télémétrie.</td></tr>
+      <tr><td><a href="hub-host.html">📄 Détail d'un hôte</a></td><td>Télémétrie 24 h, pare-feu + snapshot chiffré, paquets, journal d'audit chaîné.</td></tr>
+      <tr><td><a href="hub-enroll.html">➕ Enrollment</a></td><td>Création d'un token d'enrollment depuis l'UI + one-liner <code class="mono">curl … | bash</code>.</td></tr>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Console SaaS — global.unifiedguard.cloud</h2>
+    <table>
+      <tr><td style="width:220px;"><a href="fleet-hubs.html">🛰️ Organisations &amp; hubs</a></td><td>Fédération : organisations, plans (5/25/50/100/250 devices), quotas, dernier push, head d'audit.</td></tr>
+    </table>
+  </div>
+
+  <p class="sub" style="margin-top:6px;">⬅️ Toutes les pages sont reliées entre elles — clique dans les menus et les noms d'hôtes.</p>
+</div>
+</body>
+</html>

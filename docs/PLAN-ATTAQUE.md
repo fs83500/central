@@ -306,6 +306,20 @@ verify   (services impactés OK ? → résultat remonté, sinon échec + détail
 | **/hubs/{id}** | santé consolidée (hosts online/offline, alertes, head d'audit), blobs chiffrés (taille, jamais lisibles), bouton « changer d'offre », **certificats PIV : demander une révocation (serial) — servie au hub par PULL (SPEC §5.1.3)** |
 | **/admin** (dpnac) | toutes les orgs, plans, audit fleet |
 
+## 5.4 Vues UI (maquettes)
+
+> **Maquettes statiques HTML/CSS** livrées dans `docs/maquettes/` (02/11) — données fictives, rendu final approximatif. Consultables via `make preview-maquettes` ou n'importe quel serveur de fichiers. Le dashboard réel (go:embed, données live) arrive en J2.
+
+| Page maquette | Contenu |
+|---|---|
+| **index.html** | Portail des maquettes (hub + fleet) |
+| **hub-login.html** | Connexion centrale : e-mail + Argon2id, MFA e-mail obligatoire |
+| **hub-hosts.html** | Dashboard hôtes : KPIs en ligne, types FW, MAJ, file d'actions, audit |
+| **hub-host.html** | Détail hôte : télémétrie 24 h, pare-feu + snapshot chiffré, MAJ, audit chaîné |
+| **hub-enroll.html** | Token enrollment UI + one-liner `curl \| bash` |
+| **fleet-hubs.html** | Console SaaS : orgs, plans 5/25/50/100/250, quotas, head d'audit, 402 |
+
+
 ---
 
 ## 6. Jalons de développement

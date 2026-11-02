@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hubs — global.unifiedguard.cloud</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">Unified<span>Guard</span>.cloud</div>
+  <div class="site">global.unifiedguard.cloud</div>
+  <div class="spacer"></div>
+  <div class="user">fabien@dpnac.fr · <a href="index.html" style="color:#93c5fd;">déconnexion</a></div>
+</div>
+<div class="shell">
+  <div class="sidenav">
+    <div class="grp">Fédération</div>
+    <a href="#">Organisations</a>
+    <a class="on" href="#">Hubs</a>
+    <a href="#">Quotas</a>
+    <div class="grp">Administration</div>
+    <a href="#">Utilisateurs</a>
+    <a href="#">Audit fleet</a>
+    <a href="#">Offres</a>
+  </div>
+  <div class="main">
+    <h1>Organisations &amp; hubs</h1>
+    <p class="sub">Les centrales poussent leurs données de consolidation — le global ne pousse jamais rien vers elles (règle d'or).</p>
+
+    <div class="cards">
+      <div class="card"><div class="k">Organisations</div><div class="v">3</div><div class="d">multi-appartenance</div></div>
+      <div class="card"><div class="k">Hubs fédérés</div><div class="v">4</div><div class="d">2 poussent, 2 en attente</div></div>
+      <div class="card ok"><div class="k">Hôtes consolidés</div><div class="v">68</div><div class="d">toutes organisations</div></div>
+      <div class="card"><div class="k">Revenu MRR</div><div class="v">312 €</div><div class="d">plans 5+25+50+250</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Hubs</h2>
+      <table>
+        <thead><tr><th>Centrale</th><th>Organisation</th><th>Plan</th><th>Quota</th><th>Dernier push</th><th>Head d'audit</th><th>Statut</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>central.acme.fr</b></td><td>Acme SARL</td><td>25</td>
+            <td>4/25 <div class="meter" style="margin-top:4px; width:90px;"><i style="width:16%"></i></div></td>
+            <td class="mono">il y a 3 min</td><td class="mono">a91f…c2 · <span class="chip ok">OK</span></td>
+            <td><span class="chip ok">fédéré</span></td>
+          </tr>
+          <tr>
+            <td><b>central.garage-mecano.fr</b></td><td>Garage Mécano</td><td>5</td>
+            <td>5/5 <div class="meter" style="margin-top:4px; width:90px;"><i class="crit" style="width:100%"></i></div></td>
+            <td class="mono">il y a 1 min</td><td class="mono">d402…7b · <span class="chip ok">OK</span></td>
+            <td><span class="chip warn">quota atteint</span></td>
+          </tr>
+          <tr>
+            <td><b>central.dpnac.fr</b></td><td>DPNAC (interne)</td><td>250</td>
+            <td>59/250 <div class="meter" style="margin-top:4px; width:90px;"><i style="width:24%"></i></div></td>
+            <td class="mono">il y a 40 s</td><td class="mono">e7c1…09 · <span class="chip ok">OK</span></td>
+            <td><span class="chip ok">fédéré</span></td>
+          </tr>
+          <tr>
+            <td><b>central.nouveau-client.fr</b></td><td>Nouveau Client SAS</td><td>5</td>
+            <td>0/5 <div class="meter" style="margin-top:4px; width:90px;"><i style="width:0%"></i></div></td>
+            <td class="mono">—</td><td class="mono">—</td>
+            <td><span class="chip off">en attente d'enrollment</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Comportement quota</h2>
+      <p class="sub">Hub au quota (5/5) : le <b>6ᵉ enrollment est refusé</b> avec <span class="mono">402 Payment Required</span> — l'offre supérieure se règle sur la console SaaS, le hub la récupère au pull suivant. Les certificats PIV/YubiKey pour l'auth forte des administrateurs sont documentés en §5.1.3.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

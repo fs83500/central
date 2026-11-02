@@ -1,12 +1,25 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 J1 TERMINÉ — enrollment token→CSR→mTLS + WebSocket agent→hub e2e testé, 0 issue lint
+## Statut : 🎉 J1 TERMINÉ + maquettes UI livrées — prochaine étape : J2 (dashboard réel)
 
-Dernière mise à jour : 2026-11-02 ~18h
+Dernière mise à jour : 2026-11-02 ~18h40
 
 ## Tâche en cours
-- **Rien** — J1 terminé et testé. Prochain jalon : **J2 — hub MVP + dashboard**
+- **Rien** — J1 et maquettes livrées. Prochain jalon : **J2 — hub MVP + dashboard**
   (liste hosts, statut en ligne, audit UI, endpoints REST auth) selon PLAN-ATTAQUE.md §6.
+
+## Maquettes UI — livrées (02/11 soir)
+- **6 pages HTML/CSS statiques** dans `docs/maquettes/` : données fictives, zéro JS,
+  servables par `make preview-maquettes` (port 8799). Vue cible de J2 — le dashboard
+  réel (go:embed, données live) implémentera ces pages : index, hub-login, hub-hosts
+  (dashboard), hub-host (détail + télémétrie + audit), hub-enroll, fleet-hubs (SaaS).
+- Documentées dans PLAN-ATTAQUE.md **§5.4 Vues UI (maquettes)**.
+- Le thème CSS (chips ok/warn/crit/info/off, topbar, sidenav) servira de base au
+  dashboard réel.
+- **Makefile corrigé** : `test-pg` n'utilise plus le flag `-dsn` inexistant ; il exporte
+  `UG_TEST_DSN` et sépare les bases — run 1 : tout sauf `internal/audit` sur
+  `ug_hub_test`, run 2 : `internal/audit` seul sur `ug_hub_audit` (TRUNCATE audit ne
+  collide plus avec les tests hub/server). Nouvelle cible `preview-maquettes`.
 
 ## J1 — livré (02/11 soir)
 - **Enrollment complet (PLAN §3.1, SPEC §6.1)** : token `ug-<32hex>` (hash SHA-256 stocké,
@@ -33,7 +46,6 @@ Dernière mise à jour : 2026-11-02 ~18h
 
 ## J0 — livré (02/11)
 
-## J0 — livré (02/11)
 - **Agents servis UNIQUEMENT par la centrale (décision 02/11, SPEC §8)** : le
   global n'héberge aucun binaire/paquet agent téléchargeable — un site reste
   autonome pour installer (règle d'or + indépendance du SaaS). Appro du hub :
