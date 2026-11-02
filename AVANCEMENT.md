@@ -1,13 +1,31 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 J2 (hub MVP + dashboard) EN COURS — auth + dashboard + thème livrés, non encore committés
+## Statut : 🎉 J2 (hub MVP + dashboard) TERMINÉ — commit 3511b37 poussé sur origin/main, preview live
 
-Dernière mise à jour : 2026-11-02 ~19h15
+Dernière mise à jour : 2026-11-02 ~19h35
 
 ## Tâche en cours
-- **J2 en cours** (PLAN-ATTAQUE.md §6) : auth hub (login e-mail + MFA + sessions),
-  dashboard go:embed (5 pages), **thème clair/sombre/auto demandé par Fabien — TERMINÉ**.
-  Reste J2 : partitionnement télémétrie, page détail hôte finition, recette complète.
+- **Rien en cours** — J2 livré (commit 3511b37 poussé). Prochaine : J3 (ping applicatif
+  + file d'actions) sur validation de Fabien après recette preview.
+
+## J2 livré le 02/11 soir — commit 3511b37 (tests verts, E2E OK, poussé origin/main)
+- **Télémétrie partitionnée** : migration `005_telemetry_partitions.sql` (une seule
+  transaction, idempotente, zéro perte) — table `telemetry PARTITION BY RANGE (ts)`
+  mensuelle, PK `(host_id, ts)`, index `(host_id, ts DESC)`, backfill fenêtre 90 j,
+  `ug_telemetry_retention(months)` purge > 90 j (boucle quotidienne hub),
+  `EnsureTelemetryPartitions()` au boot (mois courant + suivant).
+  Recette : RUN1/RUN2 idempotent, insert OK, purge OK, row -120 j droppée avec la legacy.
+- **Preview cliquable dev** (demande Fabien « donne-moi les liens avec les comptes ») :
+  - `HUB_DEV_UI_LISTEN` = 2ᵉ listener HTTP pour l'UI/dashboard (le port principal
+    garde le mTLS agents `:8801`) → le proxy preview Bot ne proxifie que du HTTP.
+  - **Code MFA dev affiché dans l'UI** (`dev_mfa_code` dans la réponse login en
+    DevMode + encart sur l'étape MFA) — SMTP réel = J9.
+  - **CA persistant** : `HUB_CA_DIR` + `cryptoutil.LoadOrCreateCA()` — l'agent garde
+    son identité entre les restarts (avant : ré-enrollment à chaque restart).
+  - `scripts/hub-dev.sh` : lanceur dev du hub (preview Bot, port 8802 UI).
+  - URL : **https://bot.dpnac.cloud/preview/codex/8802/login** — admin@test.fr /
+    S3cret!pass, code MFA affiché à l'écran (dev) ; hosts, détail hôte (courbes),
+    enroll, audit vérifiés E2E (2 runs Puppeteer verts).
 
 ## Thème clair/sombre/auto — livré (02/11 soir, demande Fabien)
 - **3 modes** : ☀ clair / ◐ auto (suit l'OS via `prefers-color-scheme`) / ☾ sombre,
@@ -196,8 +214,8 @@ Dernière mise à jour : 2026-11-02 ~19h15
 ## Reste à faire
 - [x] **J1 — agent Linux** ✅ (02/11 soir) : enrollment token→CSR→mTLS (SPEC §6.1), WebSocket
       heartbeat 30 s (agent initiateur, règle d'or §2.1), self-hash vérifié par le hub.
-- [ ] **J2 — hub MVP + dashboard** : liste hosts, statut en ligne, audit UI, tokens enrollment
-      depuis l'UI + install.sh servi par la centrale (décisions SPEC §8 du 02/11).
+- [x] **J2 — hub MVP + dashboard** (commit 3511b37) : liste hosts, statut en ligne, audit UI,
+      tokens enrollment depuis l'UI + install.sh servi par la centrale (décisions SPEC §8 du 02/11).
 - [ ] Puis J3 (ping applicatif + file d'actions), J4 (FW commit-confirm), J5 (paquets),
       J6 (maintenance), J7 (fleet), J8 (Windows), J9 (MFA forte/SSO), J10 (compose+Caddy).
 - [ ] Questions SPEC.md §13 restantes (non bloquantes pour J1/J2) : 1) stack frontend
