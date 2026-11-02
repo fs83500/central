@@ -4,12 +4,12 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Connexion — UnifiedGuard</title>
 <link rel="stylesheet" href="static/app.css">
-<script>/* anti-FOUC: apply saved theme before first paint */try{var t=localStorage.getItem('ug-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+<script src="static/theme-boot.js"></script>
 </head>
 <body>
 <div class="login-wrap">
   <div class="login">
-    <h1>Unified<span style="color:var(--acc)">Guard</span></h1>
+    <h1>Unified<span class="brand-acc">Guard</span></h1>
     <p class="sub" id="site">central…</p>
     <div id="err" class="err" hidden></div>
     <form id="login-form">
@@ -24,7 +24,7 @@
       <input type="text" id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
       <button class="btn wide" type="submit">Valider le code</button>
     </form>
-    <p class="sub" id="preview-note" hidden style="margin-top:14px">
+    <p class="sub preview-note" id="preview-note" hidden>
       Preview sandbox : les requêtes POST y sont bloquées par le proxy —
       <a id="dev-login-link" href="dev-login">connexion directe en un clic (GET)</a>.
     </p>
@@ -36,103 +36,6 @@
   </div>
 </div>
 <script src="static/theme.js"></script>
-<script>
-'use strict';
-initTheme(); // apply saved theme before first paint of the picker state
-
-// Preview-sandbox detection: under the /preview/<agent>/<port>/ prefix the
-// proxy blocks POST (405) — surface the one-click GET fallback right away.
-(function () {
-  if (location.pathname.indexOf('/preview/') === 0) {
-    document.getElementById('preview-note').hidden = false;
-  }
-  // dev-login failures redirect here with ?err=<reason>.
-  const qerr = new URLSearchParams(location.search).get('err');
-  if (qerr) {
-    const el = document.getElementById('err');
-    el.textContent = 'Connexion directe refusée : ' + qerr + '.';
-    el.hidden = false;
-  }
-})();
-
-const err = document.getElementById('err');
-function showErr(msg) { err.textContent = msg; err.hidden = false; }
-
-// post() reports request failures explicitly instead of falling back to a
-// misleading "invalid credentials": network error, non-JSON body (e.g. an
-// HTML page served by a proxy), and JSON API errors are all distinct cases.
-async function post(url, body) {
-  let r;
-  try {
-    r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  } catch (e) {
-    return { status: 0, data: {}, network: true };
-  }
-  const data = await r.json().catch(() => ({ __nonjson: true }));
-  return { status: r.status, data };
-}
-
-// apiErr renders the right user-facing message for each failure class.
-function apiErr(step, status, data) {
-  if (status === 0) return 'Réseau indisponible — vérifiez votre connexion et réessayez.';
-  if (status === 429) return 'Trop de tentatives — réessayez dans une minute.';
-  if (status === 405 || data.__nonjson) return 'Le serveur a refusé la requête (' + status + '). ' +
-    'Si vous utilisez la preview sandbox, les POST y sont bloqués : utilisez le login direct (GET) ci-dessous.';
-  if (status === 401) return step === 'mfa' ? 'Code invalide ou expiré.' : (data.error === 'account not activated' ? 'Compte non activé.' : 'E-mail ou mot de passe incorrect.');
-  if (status >= 500) return 'Erreur serveur (' + status + ') — réessayez plus tard.';
-  if (data.error) return data.error;
-  return 'Réponse inattendue du serveur (' + status + ').';
-}
-
-// One-click GET login (dev): the preview proxy only forwards GET, so the
-// button navigates to dev-login?email=…&password=… which logs in server-side
-// and redirects to the dashboard. Credentials never leave this page's origin.
-(function () {
-  const link = document.getElementById('dev-login-link');
-  if (!link) return;
-  link.addEventListener('click', (e) => {
-    e.preventDefault();
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    if (!email || !password) { showErr('Renseignez e-mail et mot de passe, puis cliquez la connexion directe.'); return; }
-    const q = new URLSearchParams({ email, password });
-    location.href = 'dev-login?' + q.toString();
-  });
-})();
-
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  err.hidden = true;
-  const { status, data } = await post('api/v1/auth/login', {
-    email: document.getElementById('email').value,
-    password: document.getElementById('password').value,
-  });
-  if (status === 200 && data.mfa_required) {
-    document.getElementById('login-form').hidden = true;
-    document.getElementById('mfa-form').hidden = false;
-    document.getElementById('code').focus();
-    if (data.dev_mfa_code) {
-      const hint = document.createElement('p');
-      hint.className = 'sub';
-      hint.innerHTML = 'Code dev (SMTP arrive en J9) : <b style="letter-spacing:2px;font-size:16px">' + data.dev_mfa_code + '</b>';
-      document.getElementById('mfa-form').prepend(hint);
-    }
-    return;
-  }
-  if (status === 200 && data.ok) { location.href = 'hosts'; return; }
-  showErr(apiErr('login', status, data));
-});
-
-document.getElementById('mfa-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  err.hidden = true;
-  const { status, data } = await post('api/v1/auth/mfa', {
-    email: document.getElementById('email').value,
-    code: document.getElementById('code').value,
-  });
-  if (status === 200 && data.ok) { location.href = 'hosts'; return; }
-  showErr(apiErr('mfa', status, data));
-});
-</script>
+<script src="static/login.js"></script>
 </body>
 </html>

@@ -1,14 +1,60 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 Correctif login preview livré — dev-login GET + erreurs JSON + re-préfixage Location
+## Statut : 🎉 Correctif CSP preview livré — zéro script/style inline, tout externe
 
-Dernière mise à jour : 2026-11-02 ~20h35
+Dernière mise à jour : 2026-11-02 ~20h50
 
 ## Tâche en cours
-- **Rien en cours** — correctif login preview livré. Prochaine : J3 (ping applicatif
+- **Rien en cours** — correctif CSP livré. Prochaine : J3 (ping applicatif
   + file d'actions) sur validation de Fabien après recette preview.
 
-## Correctif login preview — 02/11 soir (échec connexion Fabien + messages d'erreur)
+## Correctif CSP — 02/11 soir (2ᵉ retour Fabien : « toujours pas, thème KO »)
+
+### Cause racine (la pièce manquante des 2 tentatives précédentes)
+Le proxy preview de la plateforme Bot applique une **CSP stricte** :
+`script-src 'self'; style-src 'self'` — **sans `'unsafe-inline'`**. Or les
+5 pages du dashboard avaient TOUT leur JavaScript dans des `<script>` inline
+(+ attributs `style=""` inline). Résultat dans le Chrome de Fabien :
+- **Aucun script ne s'exécutait** (blocage CSP silencieux) → le handler du
+  formulaire login ne s'installait jamais (submit natif → recharge de page),
+  le sélecteur de thème ne réagissait pas, l'encart dev-login était invisible
+  — symptômes exacts « toujours pas » + « le thème ne fonctionne pas ».
+- C'est aussi pourquoi les correctifs 5e2b19b (fetch relatifs, dev-login)
+  n'ont rien changé : ils vivaient dans des scripts inline eux aussi bloqués.
+
+### Correctifs livrés (zéro inline sur les 5 pages)
+- **Anti-FOUC externalisé** : `static/theme-boot.js` (applique le thème
+  sauvegardé avant première peinture).
+- **1 fichier JS par page** : `login.js`, `hosts.js`, `host.js`, `audit.js`,
+  `enroll.js` — extraction à l'identique de la logique inline (login 2 étapes,
+  MFA dev, dev-login GET 1-clic, fallback GET sur 405, KPIs, sparklines,
+  tableaux, audit).
+- **Classes CSS de remplacement** pour tous les `style=""` inline
+  (`brand-acc`, `logout-btn`, `mt12`, `mb8`, `mfa-code`, `verify-panel`,
+  `verify-sub`, `spark`, `statut`, `chart-title`, `leg-acc/ok/grid`,
+  `oneliner`, `preview-note`) — `style-src 'self'` bloque aussi les attributs.
+- Les pages n'ont plus QUE des `<script src="static/….js">` externes —
+  conformes à `script-src 'self'`.
+
+### Preuves
+- `grep` : 0 `<script>` inline, 0 `style=""` sur les 5 pages.
+- `node --check` : les 7 fichiers JS passent la vérification de syntaxe.
+- E2E préfixé : `dev-login` → `303 Location: /preview/codex/8802/hosts` +
+  cookie ; `GET hosts` contient `static/hosts.js` ; `GET static/hosts.js`
+  et `static/theme-boot.js` → 200.
+- POST login direct mauvais mdp → `401 {"error":"invalid credentials"}` JSON.
+- `go test ./...` : ok partout.
+
+### Recette preview (pour Fabien — la 3ᵉ, avec JS enfin exécutable)
+1. Ouvrir https://bot.dpnac.cloud/preview/codex/8802/login — **Ctrl+F5** (purger
+   le cache : l'ancienne page aux scripts bloqués peut être en cache).
+2. L'encart « Preview sandbox : connexion directe en un clic (GET) » doit
+   maintenant être VISIBLE.
+3. Renseigner `admin@test.fr` / `S3cret!pass` → cliquer le lien direct →
+   atterrir sur `/hosts`.
+4. Le sélecteur de thème (topbar) doit réagir immédiatement.
+
+## Correctif login preview — 02/11 soir (1ᵉʳ retour : échec connexion)
 
 ### Diagnostic (3 causes indépendantes)
 1. **Bug UI (cause principale côté hub)** : les 2 `fetch` de `login.html`

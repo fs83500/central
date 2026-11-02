@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hôtes — UnifiedGuard</title>
 <link rel="stylesheet" href="static/app.css">
-<script>/* anti-FOUC: apply saved theme before first paint */try{var t=localStorage.getItem('ug-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+<script src="static/theme-boot.js"></script>
 </head>
 <body>
 <div class="topbar">
@@ -13,11 +13,11 @@
   <div class="spacer"></div>
   <div class="theme-pick" role="group" aria-label="Thème">
     <button type="button" data-set-theme="light" title="Thème clair">☀</button>
-    <button type="button" data-set-theme="auto" class="on" title="Auto (système)">◐</button>
-    <button type="button" data-set-theme="dark" title="Thème sombre">☾</button>
+    <button type="button" data-set-theme="auto"  class="on" title="Auto (système)">◐</button>
+    <button type="button" data-set-theme="dark"  title="Thème sombre">☾</button>
   </div>
   <div class="user" id="user"></div>
-  <a class="btn small sec" href="logout" id="logout" style="color:var(--ink)">Déconnexion</a>
+  <a class="btn small sec logout-btn" href="logout">Déconnexion</a>
 </div>
 <div class="shell">
   <div class="sidenav">
@@ -41,41 +41,6 @@
   </div>
 </div>
 <script src="static/theme.js"></script>
-<script>
-'use strict';
-initTheme();
-
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-async function refresh() {
-  const r = await fetch('api/v1/hosts');
-  if (r.status === 401) { location.href = 'login'; return; }
-  const data = await r.json();
-  document.getElementById('site').textContent = data.domain || '';
-  const online = data.hosts.filter((h) => h.status === 'online').length;
-  const stale  = data.hosts.filter((h) => h.status === 'stale').length;
-  const off    = data.hosts.length - online - stale;
-  document.getElementById('kpis').innerHTML = `
-    <div class="card ok"><div class="k">En ligne</div><div class="v">${online}</div><div class="d">heartbeat &lt; 90 s</div></div>
-    <div class="card warn"><div class="k">Stale</div><div class="v">${stale}</div><div class="d">heartbeat &gt; 90 s</div></div>
-    <div class="card crit"><div class="k">Hors ligne</div><div class="v">${off}</div><div class="d">déconnecté</div></div>
-    <div class="card"><div class="k">Total</div><div class="v">${data.hosts.length}</div><div class="d">quota ${data.quota_used}/${data.quota}</div></div>`;
-  document.getElementById('rows').innerHTML = data.hosts.map((h) => `
-    <tr>
-      <td><a href="hosts?id=${esc(h.id)}"><b>${esc(h.hostname)}</b></a></td>
-      <td>${esc(h.os)} ${esc(h.os_version)}</td>
-      <td>${esc(h.fw_type || '—')}</td>
-      <td class="mono">${esc(h.agent_version || '—')}</td>
-      <td><span class="chip ${h.status === 'online' ? 'ok' : (h.status === 'stale' ? 'warn' : 'off')}">${esc(h.status)}</span></td>
-      <td class="mono">${esc(h.last_seen || 'jamais')}</td>
-      <td class="mono">${h.rtt_ms ? esc(h.rtt_ms) + ' ms' : '—'}</td>
-    </tr>`).join('');
-  const u = await fetch('api/v1/me').then((r) => r.json());
-  document.getElementById('user').textContent = u.email + ' · ' + u.role;
-  initThemeFromServer(u.theme);
-}
-refresh();
-setInterval(refresh, 10000);
-</script>
+<script src="static/hosts.js"></script>
 </body>
 </html>

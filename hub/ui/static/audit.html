@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Audit — UnifiedGuard</title>
 <link rel="stylesheet" href="static/app.css">
-<script>/* anti-FOUC: apply saved theme before first paint */try{var t=localStorage.getItem('ug-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+<script src="static/theme-boot.js"></script>
 </head>
 <body>
 <div class="topbar">
@@ -13,11 +13,11 @@
   <div class="spacer"></div>
   <div class="theme-pick" role="group" aria-label="Thème">
     <button type="button" data-set-theme="light" title="Thème clair">☀</button>
-    <button type="button" data-set-theme="auto" class="on" title="Auto (système)">◐</button>
-    <button type="button" data-set-theme="dark" title="Thème sombre">☾</button>
+    <button type="button" data-set-theme="auto"  class="on" title="Auto (système)">◐</button>
+    <button type="button" data-set-theme="dark"  title="Thème sombre">☾</button>
   </div>
   <div class="user" id="user"></div>
-  <a class="btn small sec" href="logout" id="logout" style="color:var(--ink)">Déconnexion</a>
+  <a class="btn small sec logout-btn" href="logout">Déconnexion</a>
 </div>
 <div class="shell">
   <div class="sidenav">
@@ -30,7 +30,7 @@
   <div class="main">
     <h1>Journal d'audit chaîné</h1>
     <p class="sub">Chaîne SHA-256 (N5) — chaque événement scelle le précédent. Toute falsification d'une ligne casse toute la chaîne après elle.</p>
-    <div id="verify" class="panel" style="margin-bottom:18px"></div>
+    <div id="verify" class="panel verify-panel"></div>
     <div class="panel">
       <h2>Événements (100 derniers)</h2>
       <table>
@@ -41,32 +41,6 @@
   </div>
 </div>
 <script src="static/theme.js"></script>
-<script>
-'use strict';
-initTheme();
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-async function refresh() {
-  const v = await fetch('api/v1/audit/verify').then((r) => r.json());
-  document.getElementById('verify').innerHTML = v.ok
-    ? `<span class="chip ok">CHAÎNE INTACTE</span> <span class="sub" style="display:inline;margin-left:8px">${v.events} événements vérifiés (double vérification DB + Go)</span>`
-    : `<span class="chip crit">CHAÎNE ROMPUE</span> <span class="sub" style="display:inline;margin-left:8px">${esc(v.error || '')}</span>`;
-  const r = await fetch('api/v1/audit/events');
-  if (r.status === 401) { location.href = 'login'; return; }
-  const data = await r.json();
-  document.getElementById('arows').innerHTML = (data.events || []).map((a) => `
-    <tr>
-      <td class="mono">${a.seq}</td><td class="mono">${esc(a.ts)}</td><td class="mono">${esc(a.actor)}</td><td>${esc(a.action)}</td>
-      <td class="mono">${esc(a.target_type)}:${esc(a.target_id)}</td>
-      <td><span class="chip ${a.result === 'ok' ? 'ok' : (a.result === 'denied' ? 'warn' : 'crit')}">${esc(a.result)}</span></td>
-      <td class="mono" title="${esc(a.hash)}">${esc((a.hash || '').slice(0, 12))}…</td>
-    </tr>`).join('');
-  const u = await fetch('api/v1/me').then((r) => r.json());
-  document.getElementById('user').textContent = u.email + ' · ' + u.role;
-  initThemeFromServer(u.theme);
-}
-refresh();
-setInterval(refresh, 10000);
-</script>
+<script src="static/audit.js"></script>
 </body>
 </html>

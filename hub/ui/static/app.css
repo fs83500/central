@@ -124,3 +124,20 @@ input:focus { outline: 2px solid var(--focus); border-color: var(--acc); }
 .chart h2 { font-size: 14px; margin-bottom: 8px; }
 .legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--mut); margin-top: 8px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+/* Classes replacing former inline styles (preview CSP: style-src 'self') */
+.brand-acc { color: var(--acc); }
+.logout-btn { color: var(--ink); }
+.mt12 { margin-top: 12px; }
+.mb8 { margin-bottom: 8px; }
+.mfa-code { letter-spacing: 2px; font-size: 16px; }
+.mfa-code b { letter-spacing: 2px; font-size: 16px; }
+.preview-note { margin-top: 14px; }
+.verify-panel { margin-bottom: 18px; }
+.verify-sub { display: inline; margin-left: 8px; }
+.spark { width: 100%; height: auto; }
+.statut { font-size: 18px; }
+.chart-title { margin-top: 14px; }
+.leg-acc { background: var(--acc); }
+.leg-ok { background: var(--ok); }
+.leg-grid { background: var(--svg-grid); }
+.oneliner { background: var(--hover); padding: 10px 12px; border-radius: 8px; overflow: auto; }
