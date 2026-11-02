@@ -317,6 +317,10 @@ récupération par un admin + mail de confirmation + délai de grâce de 24 h (a
 | admin | Administrer centrales/hosts de l'org |
 | viewer | Lecture seule |
 
+> **Revenus & facturation : visibles UNIQUEMENT par l'admin global `@dpnac.fr`** (règle
+> 02/11, détail §7). Les rôles owner/admin/viewer — organisations et MSP inclus —
+> ne voient ni prix, ni MRR, ni facturation, ni ce que paie une autre org.
+
 ### 5.3 Fonctions
 - Fédération : chaque centrale s'enregistre auprès du global (auth de service, TLS) et pousse
   ses données consolidées (règle d'or §2.1 : le global ne pousse JAMAIS rien).
@@ -421,6 +425,17 @@ Options facturables (02/11) :
 
 Le quota s'applique par centrale (hosts enrollés). Le suivi de quota vit sur la console
 globale, qui le pousse aux centrales. (Facturation hors périmètre technique pour l'instant.)
+
+**Confidentialité commerciale (règle 02/11)** : revenus, MRR et facturation sont
+**strictement privés — visibles uniquement par l'admin global `@dpnac.fr`**. Aucune
+organisation, aucun MSP/revendeur, aucun membre d'org (owner/admin/viewer) ne voit le
+prix payé par qui que ce soit. Concrètement dans la plateforme :
+- la carte « Revenu MRR » et les pages Offres/Facturation ne se rendent que si
+  `user.is_dpnac_admin` (toute requête API de facturation lève 403 sinon, audité) ;
+- les vues organisation (owner/admin/viewer) exposent le **quota et le plan** (leur
+  propre centrale seulement — utile pour savoir « combien il me reste »), jamais de prix ;
+- un client multi-sites voit ses N centrales, jamais le prix des autres ni une vue
+  consolidée du chiffre d'affaires.
 
 ### 7.2 CA réalisable (scénarios 02/11, mix de ventes pondéré petits > gros)
 

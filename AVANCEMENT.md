@@ -16,6 +16,11 @@ Dernière mise à jour : 2026-11-02 ~18h40
 - Documentées dans PLAN-ATTAQUE.md **§5.4 Vues UI (maquettes)**.
 - Le thème CSS (chips ok/warn/crit/info/off, topbar, sidenav) servira de base au
   dashboard réel.
+- **Règle confidentialité commerciale (02/11, Fabien)** : revenus/MRR/facturation
+  visibles UNIQUEMENT par l'admin global `@dpnac.fr` — jamais par les orgs, MSP ni
+  membres (owner/admin/viewer). Gravée dans SPEC §5.2 (note rôles) + §7 (détail,
+  API 403 audité), appliquée dans la maquette fleet-hubs (carte MRR chip « dpnac »,
+  nav « Offres » marquée dpnac). Les vues org ne montrent que quota/plan, pas de prix.
 - **Makefile corrigé** : `test-pg` n'utilise plus le flag `-dsn` inexistant ; il exporte
   `UG_TEST_DSN` et sépare les bases — run 1 : tout sauf `internal/audit` sur
   `ug_hub_test`, run 2 : `internal/audit` seul sur `ug_hub_audit` (TRUNCATE audit ne
