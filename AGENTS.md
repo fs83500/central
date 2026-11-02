@@ -5,13 +5,11 @@
 agents → centrales locales (self-hosted, docker-compose) → console globale SaaS (fédération, abonnements 5/25/50/100/250 devices).
 
 ## Règles de travail (Fabien)
-- **Git : LECTURE SEULE pour l'agent.** Toute écriture git est interdite (commit, add, push, branch…).
-  C'est Fabien qui valide (bouton « Valider ») et pousse depuis son interface. Vérifier `git status` pour repérer
-  les fichiers non committés restés de la session précédente.
+- **Git : lecture+écriture AUTORISÉES depuis le 02/11** (accord explicite de Fabien « Tu as le droit de commit et push »). Commits conventionnels de taille humaine + push vers origin ; jamais de force-push.
 - Le travail se fait dans `/workspace/projets/central`.
 - Fichier d'avancement obligatoire : `AVANCEMENT.md` à la racine du repo (tâche en cours, fait, reste à faire, décisions).
 - Livrables spec : `docs/SPEC.md` (spécification fonctionnelle) et `docs/ROADMAP.md` (idées/évolutions, tri par priorité).
-- Pas de push Git sans accord explicite — rappelé par la règle du module (régime G4.1 lecture seule).
+- Pas de push Git sans accord explicite — le régime du projet (G4.1) autorise commit/push/fusion ; à chaque jalon, utiliser les outils git_auto_commit/git_push.
 
 ## Vocabulaire
 - **Agent** : binaire installé sur un device (Linux/Windows), remonte télémétrie + exécute actions paquets/FW.

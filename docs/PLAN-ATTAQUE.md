@@ -4,7 +4,7 @@
 > Fabien (SPEC.md v0.3 + TECHNO.md). Ordre acté : MVP agent Linux → hub → dashboard →
 > agent Windows → console globale, en câblant dès J0 les socles vague 1
 > (audit chaîné N5, intégrité agent N12, clé de secours N14, bus d'événements N10).
-> Git : lecture seule pour l'agent — Fabien valide et pousse.
+> Git : l'agent committe et pousse (accord Fabien 02/11). Historique conventionnel lisible.
 
 ## 0. Principes directeurs
 
@@ -357,4 +357,4 @@ verify   (services impactés OK ? → résultat remonté, sinon échec + détail
 3. **Prompts de recette** pour Fabien (validation manuelle guidée)
 4. Le cas échéant : compose/`.env.example` à jour
 
-*Fabien committe/pousse via son interface — l'agent reste en lecture seule git.*
+*L'agent committe/pousse (accord Fabien 02/11 soir). Historique conventionnel, commits de taille humaine.*

@@ -134,7 +134,7 @@ Dernière mise à jour : 2026-11-02 ~18h
 - [ ] Questions SPEC.md §13 restantes (non bloquantes pour J1/J2) : 1) stack frontend
       (proposition : HTML/JS sans build lourd), 4) périmètre agent Windows (winget seul ?).
 - [ ] Valider/réordonner les vagues 1-5 (proposées dans IDEES.md/ROADMAP.md).
-- [ ] Fabien : valider/committer/pusher le repo (règle git lecture seule pour l'agent).
+- [x] Fabien : autorisation commit+push accordée le 02/11 (règle « lecture seule » abrogée) — J0+J1 poussés sur origin/main.
 
 ## Décisions
 - **Règle des flux** : agent push/pull vers centrale (agent initiateur), centrale push vers
@@ -149,10 +149,10 @@ Dernière mise à jour : 2026-11-02 ~18h
   câbler DÈS LA CONCEPTION (vague 1), pas rétrofitables à moindre coût.
 - **Backup : plateforme SÉPARÉE** (socle `backup.<domaine-client>`, projet distinct) — UrBackup
   = cible fonctionnelle uniquement.
-- Git : LECTURE SEULE pour l'agent — Fabien valide et pousse lui-même.
+- Git : lecture seule ABROGÉE le 02/11 soir (accord explicite de Fabien « Tu as le droit de commit et push ») — l'agent committe et pousse, historique conventionnel lisible.
 
 ## Notes
 - Repo parti d'un README d'une ligne (commit 5cdb25f). Tous les docs créés le 02/11 sont
-  NON COMMITTÉS par l'agent (règle git lecture seule) — Fabien valide/pousse via son interface.
+  COMMITTÉS et poussés par l'agent le 02/11 soir après accord explicite (J0+J1 sur origin/main, commit 476da45).
 - Capture de référence : interface type PatchMon (hosts 14, groupes, agent auto-update,
   compliance) + UrBackup dans les onglets du navigateur (d'où l'idée N16).
