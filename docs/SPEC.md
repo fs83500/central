@@ -546,3 +546,116 @@ REST/JSON · HTML/CSS/JS vanilla (UI embarquée via go:embed, zéro npm) · Char
 Caddy 2 (TLS auto) · Docker Compose · Ed25519 (signatures) + AES-256-GCM (chiffrement) +
 RSA-OAEP/X25519 (enveloppe clés de site) + Argon2id (clé de secours) · nfpm/WiX (packaging
 agents) · golangci-lint + go test · Gitea Actions si activé sur git.dpnac.cloud.
+
+## 15. Réponse NIS2 — alignement réglementaire (analyse 02/11)
+
+L'objectif n'est PAS de vendre « un RMM de plus » : UnifiedGuard se positionne comme
+**la brique technique de conformité NIS2** pour les entités couvertes (essentielles
+et importantes) — patching, gestion des FW, piste d'audit infalsifiable — avec en
+plus la souveraineté des données (rien ne quitte le site).
+
+### 15.1 Le marché visé par NIS2
+
+- Transposition française (LopMI 2 / ordonnance) : ~1 500-3 000 entités **essentielles**
+  (énergie, transport, santé, finance, eau, administration…) et **importantes**
+  (PME/ETI de 50-250 salariés dans les secteurs couverts), **plus leurs sous-traitants
+  et prestataires** — qui doivent démontrer leur conformité pour garder le contrat.
+- Ce qui se vend aujourd'hui à ces entités : du conseil (audits à 10-30 k€) et des
+  GRC démesurés (ServiceNow, OneTrust). **Le maillon manquant : l'outil opérationnel
+  qui fait la conformité au quotidien** et produit la preuve le jour du contrôle.
+- Fenêtre temporelle : la conformité se joue sur 2026-2028 (période de contrôle ANSSI).
+
+### 15.2 Mapping mesures NIS2 → plateforme (ce qui est déjà prévu au SPEC)
+
+| Mesure NIS2 (annexe I) | Fonction UnifiedGuard | Statut SPEC |
+|---|---|---|
+| Gestion des vulnérabilités (analyse + correctifs) | Patch manager avec CVE par sévérité (N15), fenêtres de maintenance, canari (N8) | ✅ prévu |
+| Sécurité du réseau (segmentation, FW) | Gestion centralisée des FW, détection de dérive (N3), rollback commit-confirm | ✅ prévu |
+| Gestion des incidents (détection, réponse) | Bus de notifications (N10), break-glass (N1), automatisation (N13), télémétrie | ✅ prévus |
+| Sécurité de la chaîne d'approvisionnement | Auto-update signé, intégrité agent (N12), manifeste Ed25519, audit chaîné | ✅ prévus |
+| Contrôle d'efficacité (audits, pentests) | **Audit chaîné hash-link (N5)** — piste d'audit infalsifiable, double vérification | ✅ **codé (J0)** |
+| Continuité d'activité | Backup chiffré par site (§11), restauration | ✅ prévu |
+| Gestion des comptes / MFA | MFA forte WebAuthn/TOTP (§5.1.2), rôles, break-glass tracé | ✅ prévus |
+| **Preuve / reporting de conformité** | **Rapport de conformité 1 clic** (extraction de l'audit chaîné) | ❌ **À CODER — le gap** |
+
+### 15.3 Le gap à combler : le rapport de conformité 1 clic
+
+La réglementation exige de **prouver**. Il manque donc un livrable, le vrai argument
+commercial : un **rapport NIS2 de conformité technique** généré depuis l'audit chaîné :
+
+1. **Inventaire des actifs** (hosts, OS, agents en ligne, FW actifs) — J5.
+2. **État de patching par host** : % à jour, retard par sévérité CVE (N15), dérogations
+   tracées dans l'audit (qui, quand, pourquoi).
+   → mesure « gestion des vulnérabilités ».
+3. **Hygiène FW** : règles actives vs référence, dérives détectées (N3), historique
+   des rollbacks et incidents → mesure « sécurité du réseau ».
+4. **Journal des incidents et actions** : extrait horodaté + **preuve d'intégrité**
+   (chaîne de hash + résultat `/api/v1/audit/verify`) → « contrôle d'efficacité ».
+5. **Preuves cryptographiques** : signatures Ed25519 des binaires agent, self-hash
+   dans chaque heartbeat (N12) → « chaîne d'approvisionnement ».
+6. **Export** : PDF signé + JSON horodaté, conservé côté client — valable le jour du
+   contrôle même si la plateforme a évolué depuis.
+
+Ce rapport transforme l'audit chaîné (déjà codé en J0) en argument commercial.
+Il devient le **module Premium NIS2**, facturable par site.
+
+### 15.4 Tarification alignée NIS2 (option premium par centrale)
+
+| Élément | Prix indicatif |
+|---|---|
+| Module « Conformité NIS2 » (rapports 1 clic, scoring par mesure, export signé) | +39 € HT/mois par centrale (petites offres), +49 € pour Gold/Platinum |
+| Pack conformité (audit initial : entretien + état des lieux + rapport) | ~990 € HT ponctuel |
+| Support premium (SLA 4 h) | 500-1 500 €/an |
+
+Raisonnement : le contrôle NIS2 n'est pas un abonnement que la DSI peut couper en
+crise — c'est une **assurance**. Un pack à ~50 €/mois contre un risque de sanction
+jusqu'à 10 M€ ou 2 % du CA pour les essentielles, ou 7 M€ / 1,4 % pour les importantes,
+est une vente par le budget « conformité » (qui existe déjà), pas par le budget
+« tooling » (qu'il faut créer). On vend la couche conformité, pas la couche outil.
+
+### 15.5 Positionnement commercial
+
+1. **Ne pas se battre sur le terrain RMM saturé** (NinjaOne, Atera, Tactical RMM…).
+2. **Vendre la conformité** : « l'outil qui fait NIS2 au quotidien et prouve le jour
+   du contrôle » — budget existant, urgence réglementaire, différenciation claire.
+3. **Le canal** : plutôt que la vente directe TPE (grind interminable), passer par
+   (a) les **MSP/ESN** qui accompagnent déjà ces entités (une centrale par client,
+   console de fédération = vue MSP), (b) les **cabinets de conseil** qui prescrivent
+   la brique technique à leurs clients NIS2 (l'audit initial à 990 € peut être
+   refacturé par le cabinet).
+4. **Preuve souveraineté** : données métier chiffrées par site, jamais lisible par
+   l'éditeur — argument face aux outils US (CLOUD Act), naturel en France.
+
+### 15.6 Ce que ça change au produit (à intégrer au backlog)
+
+- **N17 — Rapport de conformité NIS2** (P1, module premium) : extraction depuis
+  l'audit chaîné : inventaire, patching par sévérité, hygiène FW, incidents, preuves
+  cryptographiques, export PDF/JSON signé. Dépend de : N15 (CVE), N3 (dérive), J5.
+- **N18 — Scoring par mesure NIS2** : badge « conformité » par host/site (à jour /
+  à surveiller / non conforme), visible sur le dashboard — le vendeur a une démo
+  qui « parle contrôle ANSSI », pas seulement des graphes.
+- **N19 — Registre des dérogations** : chaque MAJ non appliquée ou règle FW tolérée
+  doit être justifiée (qui, pourquoi, jusqu'à quand) — le registre NIS2 classique.
+  Alimente le rapport.
+- Jalon J10 suggéré (après J8-J9) : livraison du module conformité NIS2.
+
+### 15.7 Honnêteté de la vente (ce qu'on ne revendique PAS)
+
+- **Pas un logiciel « certifié ANSSI »** ni un référentiel : la certification NIS2
+  n'existe pas — l'entité démontre, l'ANSSI apprécie. On fournit des **preuves
+  techniques**, pas une conformité « garantie ».
+- **Pas un GRC** : pas de gestion de politique documentaire, ni de formation du
+  personnel, ni d'analyse de risque EBIOS au sens formalisée. Le périmètre est le
+  **pilotage technique** (patching, FW, inventaire, audit, restauration) — brique
+  parmi d'autres de la conformité globale.
+- Position recommandée : « UnifiedGuard ne remplace pas votre consultant — il le
+  rend audité et vérifiable. »
+### 15.8 Conclusion : est-ce une niche ?
+
+- Le marché RMM global : non, saturé.
+- La **niche** : « brique technique de conformité NIS2 pour entités françaises
+  couvertes + leurs prestataires », vendue via MSP/conseil, appuyée sur l'audit
+  chaîné (existant) et le rapport de conformité (à coder, N17-N19).
+- C'est une fenêtre temporelle — les concurrents majeurs ajouteront des modules
+  NIS2 ; la fenêtre est de quelques années.
+

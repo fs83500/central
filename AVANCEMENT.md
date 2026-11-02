@@ -76,6 +76,16 @@ Dernière mise à jour : 2026-11-02 ~18h40
   PostgreSQL réel (port 55432, détection falsification incluse).
 - **Makefile** : `build` (ldflags version), `migrate-hub`, `migrate-fleet`, `run-hub`.
 
+## Business / positionnement (02/11 soir)
+- **Grille tarifaire + scénarios CA intégrés à la SPEC** (commit 10649a1, poussé) :
+  Starter 15 €/mois → Platinum 300 €/mois par centrale, annual −17 %, options
+  (backup +20 %, support premium, onboarding). CA : An1 ~25-35 k€ → An3 ~300-500 k€.
+- **Angle NIS2 posé (SPEC §15, N17-N19 dans IDEES/ROADMAP)** : UnifiedGuard vendu comme
+  brique technique de conformité NIS2 (patching, FW, audit chaîné infalsifiable,
+  rapport 1 clic) via MSP/conseil — pas comme « un RMM de plus ». Module premium
+  +39/+49 € HT/mois, pack conformité ~990 €. N17-N19 en Vague 6, statut ⏳ proposition
+  (à faire valider par Fabien).
+
 ## Fait (suite)
 - **CORS & reverse proxy (03/11, SPEC §6.2bis)** : same-origin strict par défaut (UI+API même
   binaire/origine, zéro header CORS) ; jamais `Access-Control-Allow-Origin: *` ; filtre

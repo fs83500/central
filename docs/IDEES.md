@@ -1,4 +1,4 @@
-# IDEES N1-N16 — développement détaillé (N1-N15 ✅ validées 02/11 · N16 ✅ « à terme »)
+# IDEES N1-N19 — développement détaillé (N1-N15 ✅ validées 02/11 · N16 ✅ « à terme » · N17-N19 ⏳ proposition 02/11, angle NIS2)
 
 > Statut : 🔵 toutes proposées, aucune encore validée/refusée.
 > Légende effort : **S** = jours · **M** = 1-2 semaines · **L** = 2-4 semaines · **XL** = chantier majeur.
@@ -24,6 +24,9 @@
 | N14 | Clé de secours scellée | Export de la clé privée du site chiffrée par passphrase (PKCS#8 + AES-GCM), conservée HORS LIGNE par le client ; procédure de restauration + test de restauration périodique | Sans elle : perdre la centrale = perdre TOUTES les sauvegardes FW ; c'est le garde-fou de l'idée 9 ✅ | S-M | P1 | Sauvegardes chiffrées ✅ |
 | N15 | Suivi CVE par sévérité | Mapping paquets→CVE (feeds distro : Debian security-tracker, ALAS/ELSA, OVAL) ; badge criticité par MAJ ; vue « sécurité d'abord » : hosts avec vulnérabilités critiques en tête | Argument commercial n°1 d'un patch manager : montrer LE risque, pas 400 MAJs | L | P2 | Gestion paquets, source de données CVE |
 | N16 | Backup natif type UrBackup | Moteur de sauvegarde à CODER nativement dans l'agent (Go) : fichiers puis images disque, chunks CDC dédup (SHA-256) + zstd + AES-256-GCM, restauration fichier/bare-metal, réplication chiffrée centrale+glob (aucun ne peut lire sans la clé du site) | Vision complète patch + FW + backup sous UNE marque, UN seul agent à installer | M (B1) → XL (B4) | P3 (« à terme ») | Socle, canal mTLS, gestion paquets, clé de site |
+| N17 | Rapport de conformité NIS2 | Rapport 1 clic généré depuis l'audit chaîné : inventaire, % patching par sévérité CVE, hygiène FW (dérives N3, rollbacks), incidents, preuves crypto (signatures, self-hash), export PDF/JSON signé + horodaté | Le jour du contrôle, on PROUVE : piste infalsifiable + synthèse par mesure NIS2 ; module premium facturable | L | P1 (module premium NIS2) | N5 ✅, N15, N3, N13 |
+| N18 | Scoring par mesure NIS2 | Badge « conformité » par host/site : à jour / à surveiller / non conforme, calculé en continu sur patching, FW, agents, incidents ; visible dashboard + global | La démo « parle contrôle ANSSI », pas seulement des graphes ; ancre la marque conformité | M | P1 (avec N17) | N17, télémétrie |
+| N19 | Registre des dérogations | Toute MAJ non appliquée ou règle FW tolérée doit être justifiée (qui, pourquoi, échéance) ; registre consultable, alimente le rapport NIS2 ; alerte à l'échéance | Le registre NIS2 classique, sinon le rapport montre des trous inexpliqués | S-M | P1 (avec N17) | Gestion paquets, N3 |
 
 ## Détail par idée
 
@@ -168,6 +171,8 @@
 - **Vague 3 — exploitation à l'échelle** : N8, N9, N4, N15
 - **Vague 4 — différenciateurs marché** : N7, N11, N13
 - **Vague 5 — sauvegarde natif (à terme)** : N16 — moteur type UrBackup à CODER, phasage B1→B4
+- **Vague 6 — conformité NIS2 (module premium, SPEC §15)** : N17 → N19 → N18
+  *(le rapport d'abord — c'est l'argument de vente ; le registre alimente ; le scoring last)*
 
 ## À trancher
 

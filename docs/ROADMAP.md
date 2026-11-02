@@ -71,3 +71,14 @@ Toutes ✅. Détail complet dans `docs/IDEES.md`. Résumé :
   à confirmer, quotas de stockage par offre à définir.
 - Questions ouvertes SPEC.md §13 : stack frontend, ordre de construction, mono/multi-tenant
   SaaS, périmètre agent Windows, phasage backup + quotas stockage.
+
+## C. Angle NIS2 — module conformité premium (proposition 02/11, SPEC §15)
+
+- **Positionnement** : brique technique de conformité NIS2 pour entités essentielles/importantes
+  et leurs prestataires — on vend la conformité (budget existant), pas le tooling.
+- **N17 rapport de conformité 1 clic** (extrait de l'audit chaîné, export PDF/JSON signé) →
+  **N19 registre des dérogations** → **N18 scoring par mesure**.
+- **Tarif indicatif** : +39 € HT/mois par centrale (petites offres), +49 € pour Gold/Platinum ;
+  pack conformité initial ~990 € HT.
+- **Honnêteté** : pas de « certification ANSSI » (elle n'existe pas), pas un GRC — on fournit
+  les preuves techniques du pilotage (patching, FW, inventaire, audit infalsifiable, restauration).
