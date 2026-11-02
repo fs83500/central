@@ -419,9 +419,14 @@ pour qui ne paierait jamais Lansweeper/JumpCloud). Chaque centrale = 1 licence :
 un client multi-sites achète N licences → le multi-sites fait monter l'ARPU.
 
 Options facturables (02/11) :
+- **Conformité NIS2** (§15) : +39 € HT/mois par centrale (Starter→Silver),
+  +49 € (Gold/Platinum) — rapport signé, scoring, dérogations, veille.
 - **Module backup chiffré** (§11.5) : +20 % du plan (ex. Gold 140 → 168 €/mois).
 - **Support premium** (SLA 4 h, assistance config FW) : 500-1 500 €/an.
 - **Onboarding / installation initiale** : 300-500 € ponctuel.
+
+Les options se posent PAR CENTRALE → un client multi-sites achète N fois ;
+pour un MSP, chaque option est un SKU refacturable avec marge.
 
 Le quota s'applique par centrale (hosts enrollés). Le suivi de quota vit sur la console
 globale, qui le pousse aux centrales. (Facturation hors périmètre technique pour l'instant.)
@@ -618,9 +623,26 @@ Il devient le **module Premium NIS2**, facturable par site.
 
 | Élément | Prix indicatif |
 |---|---|
-| Module « Conformité NIS2 » (rapports 1 clic, scoring par mesure, export signé) | +39 € HT/mois par centrale (petites offres), +49 € pour Gold/Platinum |
+| **Option « Conformité NIS2 »** (N17 rapport signé + N18 scoring + N19 dérogations + rapport consolidé multi-centrales + veille réglementaire) | +39 € HT/mois par centrale (Starter→Silver), +49 € (Gold/Platinum) |
 | Pack conformité (audit initial : entretien + état des lieux + rapport) | ~990 € HT ponctuel |
 | Support premium (SLA 4 h) | 500-1 500 €/an |
+
+**Design de l'option (02/11) — frontière socle ↔ option :**
+
+| | Socle (tous plans) | Option « Conformité NIS2 » |
+|---|---|---|
+| Contenu | Audit chaîné N5 (l'ADN, jamais vendu séparément), journal des actions, export CSV compliance (J6) | N17 rapport 1 clic PDF/JSON signé, N18 scoring par mesure, N19 registre des dérogations, rapport consolidé multi-centrales (fleet), veille réglementaire (maj du mapping mesures/guides) |
+| Règle | **Le socle ENREGISTRE, l'option PROUVE.** L'audit chaîné reste dans tous les plans — l'option vend le formatage réglementaire, le scoring et la veille | |
+
+Pourquoi option et pas inclus : (1) protège le prix d'appel 15 € (un site non
+régulé ne paie pas pour une conformité qu'il n'a pas à prouver) ; (2) segmentation
+automatique — l'acheteur de l'option EST l'entité régulée ; (3) ARPU +35 % sur la
+cible qui a le budget (Gold 140 → 189 €/mois) ; (4) SKU unique refactable par les
+MSP, sans renégocier le plan.
+
+Mécanique technique (à câbler J7/J10) : flag `hubs.options` jsonb (ex. `{"nis2": true}`)
+dans la migration fleet 003, servi au hub par PULL avec le quota (règle d'or §2.1) ;
+gate hub sur les routes `/api/v1/nis2/*` (option absente → 404 + renvoi upgrade UI).
 
 Raisonnement : le contrôle NIS2 n'est pas un abonnement que la DSI peut couper en
 crise — c'est une **assurance**. Un pack à ~50 €/mois contre un risque de sanction

@@ -91,6 +91,14 @@ Dernière mise à jour : 2026-11-02 ~18h40
   +39/+49 € HT/mois, pack conformité ~990 €. N17-N19 en Vague 6, statut ⏳ proposition
   (à faire valider par Fabien).
 
+### Option « Conformité NIS2 » (02/11 soir, SPEC §7.1 + §15.4)
+- DÉCISION : le module conformité est une **OPTION PAR CENTRALE** (+39 € HT/mois
+  Starter→Silver, +49 € Gold/Platinum). Frontière : « le socle ENREGISTRE
+  (audit chaîné N5 dans tous les plans), l'option PROUVE » (N17 rapport signé,
+  N18 scoring, N19 dérogations, consolidé multi-centrales, veille).
+- Mécanique : `hubs.options` jsonb (fleet migration 003) servi au hub par PULL ;
+  gate `/api/v1/nis2/*` (absente → 404 + upgrade UI). SKU refactable par les MSP.
+
 ## Fait (suite)
 - **CORS & reverse proxy (03/11, SPEC §6.2bis)** : same-origin strict par défaut (UI+API même
   binaire/origine, zéro header CORS) ; jamais `Access-Control-Allow-Origin: *` ; filtre
