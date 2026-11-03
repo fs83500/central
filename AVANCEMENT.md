@@ -1,17 +1,32 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🔶 J4 livré (pare-feu commit-confirm) — E2E chemin échec validé, chemin confirm à recetter sur hôte réel
+## Statut : 🎉 BÊTA 0.1 LIVRÉE (03/11 soir) — J4 + compose + binaires, E2E TLS complet validé
 
-Dernière mise à jour : 2026-11-03 ~16h10
+Dernière mise à jour : 2026-11-03 ~16h32
 
 ## Tâche en cours
-- **J4 terminé côté code** (hub+agent+UI+migration 007). E2E validé sur le chemin
-  **failed** : sandbox sans CAP_NET_ADMIN → `nft` absent → l'agent échoue PROPREMENT
-  au snapshot (session fermée `failed`, pare-feu intact). Le chemin **confirm/rollback**
-  (snapshot réel → apply runtime → compte à rebours agent → confirm/rollback auto)
-  exige un hôte cible avec un vrai pare-feu — à recetter chez Fabien.
-- Prochaine : recette J3+J4 par Fabien, puis J5 (paquets), J3-restant (groupes CRUD, filtres).
+- **BÊTA 0.1 livrée** : archive `unifiedguard-beta-0.1.tar.gz` à la racine du projet
+  (sha256 `8ccd3a69…`, ~9,8 Mo) — code source complet + `docker-compose.yml` (db+hub) +
+  `Dockerfile` (build Go multi-stage, binaires déjà construits inclus dans `bin/`) +
+  `README-BETA.md` + `run-beta.sh` (lancement sans Docker) + `.env.example`.
+- E2E bêta validé dans le sandbox : DB vierge → migrations auto 001→007 → bootstrap admin →
+  login+MFA (code dans les logs, `HUB_MFA_LOG_BETA=1`) → enrollment token → agent natif
+  enrôlé en https self-signed (`UG_ENROLL_INSECURE=1`) → **WS mTLS** (client cert + CA
+  vérifiée) → heartbeat → hôte `online` → ping RTT → action inventory → audit chaîné OK.
+- Recette restante chez Fabien : `docker compose up -d --build` sur une vraie machine,
+  J4 confirm/rollback sur hôte avec pare-feu réel, preview UI.
 
+## Livraison bêta (03/11 soir) ✅
+- **c1d5f4d** : docker-compose.yml (postgres 17 + hub, migrations auto au boot,
+  volumes `ug_db_data`/`ug_hub_data`), Dockerfile multi-stage (build → image finale
+  debian-slim, envs via compose), `.env.example`, `README-BETA.md` (démarrage,
+  enrollment agent, systemd, limites bêta), `run-beta.sh` (mode sans Docker).
+- **Migrations unifiées** : SQL déplacé vers `internal/migrations/sql/hub/` (go:embed,
+  appliquées automatiquement au boot sauf `HUB_MIGRATIONS=off`), `migrations/hub/`
+  garde un README pointeur (Makefile psql mis à jour).
+- **bin/ construits avec version** (hub 12 Mo, agent 6,6 Mo, fleet 5,8 Mo, ldflags
+  commit+date) — inclus dans l'archive pour un `run-beta.sh` sans compilation Go.
+- gitignore : `bin/`, `/data/`, `*.tar.gz` (artefacts de livraison hors git).
 
 ## J4 — Pare-feu commit-confirm (03/11 après-midi) ✅ code / 🔶 recette hôte réel
 Machine à états §3.5 sur l'AGENT (autorité du compte à rebours) :
