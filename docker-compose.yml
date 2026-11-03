@@ -40,6 +40,9 @@ services:
   hub:
     # Image pré-buildée (pas de build au premier `up` — bêta livraison).
     # docker load -i central-unified-latest.tar   ← à faire UNE fois.
+    # Une fois le registry Forgejo/GHCR en place, remplacez par :
+    #   image: git.dpnac.cloud/dpnac/central-unified:latest   (Forgejo)
+    #   image: ghcr.io/fs83500/central-unified:latest          (GHCR, repo privé → login)
     # (Le build depuis la source reste possible : voir Dockerfile + README-BETA.)
     image: central-unified:latest
     # build:                       # ← décommentez pour construire depuis la source

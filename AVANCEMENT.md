@@ -1,10 +1,20 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 BÊTA 0.1 LIVRÉE + IMAGE DOCKER central-unified:latest (03/11 soir)
+## Statut : 🎉 BÊTA 0.1 + IMAGE central-unified:latest + WORKFLOWS CI (03/11 soir)
 
-Dernière mise à jour : 2026-11-03 ~16h55
+Dernière mise à jour : 2026-11-03 ~17h20
 
 ## Tâche en cours
+- **CI build image LIVRÉE (workflows)** : `.forgejo/workflows/build-image.yml`
+  (Forgejo Actions → registry Docker intégré `git.dpnac.cloud/dpnac/central-unified:*`)
+  + `.github/workflows/build-image.yml` (GHCR `ghcr.io/fs83500/central-unified:*`).
+  Dry-run local des mêmes commandes : OK (image 24,8 Mo produite, tags latest+commit).
+  Prérequis Forgejo : runner act_runner (label docker-latest), registry intégré (activé
+  par défaut), GITHUB_TOKEN scope packages. NOTE : le sandbox ne voit PAS git.dpnac.cloud
+  (pas de credentials Forgejo) → workflows poussés sur GitHub, à importer/mirroter côté
+  Forgejo. Repo GitHub PRIVÉ (404 anonyme) → GHCR = package privé (login requis).
+  Une branche `beta-0.1` existe sur origin (poussée par erreur via git_push HEAD->beta-0.1,
+  inoffensive — le tag annoté local a été supprimé, git_push ne pousse que des branches).
 - **Image Docker pré-buildée livrée** : `central-unified-latest.tar` à la racine du projet
   (sha256 `80e7f065…`, ~24 Mo, tags `central-unified:latest`/`central-unified:0.1`/
   `ghcr.io/fs83500/central-unified:latest`). Image **FROM scratch** : binaire hub STATIQUE

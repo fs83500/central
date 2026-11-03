@@ -1,0 +1,107 @@
+# UnifiedGuard — build automatisé de l'image Docker (Forgejo Actions).
+#
+# Publie dans le REGISTRY DOCKER INTÉGRÉ de Forgejo :
+#   git.dpnac.cloud/<owner>/<repo>  (le module git de la forge sert aussi
+#   de registry d'images — activable dans la config site de Forgejo).
+#
+# Déclencheurs : push sur main, tag v*.
+# Résultat : git.dpnac.cloud/dpnac/central-unified:{latest,<tag>}.
+#
+# PRÉREQUIS (côté instance Forgejo) :
+#   1. Un runner Forgejo/act_runner attaché (labels: docker) — voir
+#      https://forgejo.org/docs/latest/admin/runner-installation/
+#   2. Le registry intégré activé (par défaut : ENABLED=true ; c'est
+#      `[storage]` qui compte) — les images vivent à côté des git LFS.
+#   3. Le token utilisé par docker login doit avoir le scope "packages:write".
+#      Le secret GITHUB_TOKEN injecté par Forgejo Actions a ce scope sur la
+#      même instance. Variables ci-dessous : FORGEJO_URL + REPO_SLUG.
+
+name: build-image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  REGISTRY: git.dpnac.cloud
+  # Image name: lowercase repo owner + name. central → central-unified.
+  IMAGE: git.dpnac.cloud/${{ gitea.repository_owner }}/central-unified
+
+jobs:
+  build:
+    runs-on: docker-latest  # runner avec label docker (act_runner)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Compute metadata
+        id: meta
+        run: |
+          COMMIT="${GITHUB_SHA::7}"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          # Tag git v1.2.3 → tags image 1.2.3 + latest ; branche → latest.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "tags=${IMAGE}:${GITHUB_REF_NAME#v},${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${IMAGE}:latest,${IMAGE}:${COMMIT}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          IMAGE: ${{ env.IMAGE }}
+
+      - name: Build static binaries
+        run: |
+          go build -trimpath -tags netgo,osusergo \
+            -ldflags "-s -w \
+              -X git.dpnac.cloud/dpnac/central/internal/version.gitCommit=${{ steps.meta.outputs.commit }} \
+              -X git.dpnac.cloud/dpnac/central/internal/version.buildDate=${{ steps.meta.outputs.date }}" \
+            -o bin/hub ./cmd/hub
+          go build -trimpath -tags netgo,osusergo \
+            -ldflags "-s -w \
+              -X git.dpnac.cloud/dpnac/central/internal/version.gitCommit=${{ steps.meta.outputs.commit }} \
+              -X git.dpnac.cloud/dpnac/central/internal/version.buildDate=${{ steps.meta.outputs.date }}" \
+            -o bin/agent ./cmd/agent
+          go build -trimpath -tags netgo,osusergo \
+            -ldflags "-s -w \
+              -X git.dpnac.cloud/dpnac/central/internal/version.gitCommit=${{ steps.meta.outputs.commit }} \
+              -X git.dpnac.cloud/dpnac/central/internal/version.buildDate=${{ steps.meta.outputs.date }}" \
+            -o bin/fleet ./cmd/fleet
+
+      - name: Assemble scratch image (daemonless — tools/mkimage)
+        run: |
+          go run ./tools/mkimage \
+            -hub bin/hub -agent bin/agent -fleet bin/fleet \
+            -tags "${{ steps.meta.outputs.tags }}" \
+            -commit "${{ steps.meta.outputs.commit }}" \
+            -out image.tar
+          sha256sum image.tar
+
+      - name: Push to Forgejo container registry
+        run: |
+          # Le GITHUB_TOKEN de Forgejo Actions porte packages:write sur
+          # l'instance. Login par token via stdin (pas de mot de passe).
+          echo "${GITHUB_TOKEN}" | docker login "${REGISTRY}" \
+            -u "${GITHUB_ACTOR}" --password-stdin
+          # Import du docker-archive + push de chaque tag.
+          docker load -i image.tar
+          # mkimage pose plusieurs RepoTags sur la même archive : le load
+          # crée l'image UNE fois ; pushons chaque tag listé.
+          IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
+          for t in "${TAGS[@]}"; do docker push "$t"; done
+          docker logout "${REGISTRY}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact (image tarball)
+        uses: actions/upload-artifact@v3
+        with:
+          name: central-unified-image
+          path: image.tar
+          retention-days: 7

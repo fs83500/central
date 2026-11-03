@@ -1,0 +1,79 @@
+# UnifiedGuard — build de l'image Docker (GitHub Actions — secours).
+# Publie sur GHCR : ghcr.io/fs83500/central-unified
+#
+# Le repo GitHub est PRIVÉ → l'image GHCR est privée aussi (visible avec un
+# docker login ghcr.io au compte GitHub). Pour une image publique sans login,
+# préférer Forgejo (workflow .forgejo/workflows/build-image.yml) ou rendre
+# le repo/package public dans les settings du package.
+
+name: build-image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/central-unified
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Compute metadata
+        id: meta
+        run: |
+          COMMIT="${GITHUB_SHA::7}"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "tags=${IMAGE}:${GITHUB_REF_NAME#v},${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${IMAGE}:latest,${IMAGE}:${COMMIT}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          IMAGE: ${{ env.IMAGE }}
+
+      - name: Build static binaries
+        run: |
+          for b in hub agent fleet; do
+            go build -trimpath -tags netgo,osusergo \
+              -ldflags "-s -w \
+                -X git.dpnac.cloud/dpnac/central/internal/version.gitCommit=${{ steps.meta.outputs.commit }} \
+                -X git.dpnac.cloud/dpnac/central/internal/version.buildDate=${{ steps.meta.outputs.date }}" \
+              -o bin/$b ./cmd/$b
+          done
+
+      - name: Assemble scratch image (daemonless — tools/mkimage)
+        run: |
+          go run ./tools/mkimage \
+            -hub bin/hub -agent bin/agent -fleet bin/fleet \
+            -tags "${{ steps.meta.outputs.tags }}" \
+            -commit "${{ steps.meta.outputs.commit }}" \
+            -out image.tar
+
+      - name: Push to GHCR
+        run: |
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io \
+            -u "${GITHUB_ACTOR}" --password-stdin
+          docker load -i image.tar
+          IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
+          for t in "${TAGS[@]}"; do docker push "$t"; done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: central-unified-image
+          path: image.tar
+          retention-days: 7

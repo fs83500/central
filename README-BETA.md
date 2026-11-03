@@ -55,6 +55,23 @@ statique + agent + fleet embarqués, healthcheck intégré (`hub healthcheck`,
 sans curl). Tags aussi disponibles : `central-unified:0.1`,
 `ghcr.io/fs83500/central-unified:latest` (prêt pour un push registry).
 
+### Option A2 — build automatisé par la forge (CI)
+
+Deux workflows livrés, prêts à brancher :
+
+- **Forgejo** (`.forgejo/workflows/build-image.yml`) : à chaque push sur `main`
+  ou tag `v*`, build statique + `tools/mkimage` + push vers le **registry
+  Docker intégré de Forgejo** → `git.dpnac.cloud/dpnac/central-unified:latest`.
+  Prérequis côté instance : un runner (`act_runner`, label `docker-latest`),
+  le registry intégré activé, `GITHUB_TOKEN` avec scope packages (défaut).
+  Ensuite le compose devient :
+  ```yaml
+  image: git.dpnac.cloud/dpnac/central-unified:latest
+  ```
+- **GitHub Actions** (`.github/workflows/build-image.yml`) : publie sur
+  **GHCR** `ghcr.io/fs83500/central-unified` (repo privé → `docker login
+  ghcr.io` requis pour pull, ou rendre le package public).
+
 ### Option B — construire depuis la source
 
 Décommentez la section `build:` du service `hub` dans `docker-compose.yml`
