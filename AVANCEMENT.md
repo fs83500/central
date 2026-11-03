@@ -1,12 +1,50 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : ✅ J3 livré — ping applicatif RTT + file d'actions hors-ligne
+## Statut : 🔶 J4 livré (pare-feu commit-confirm) — E2E chemin échec validé, chemin confirm à recetter sur hôte réel
 
-Dernière mise à jour : 2026-11-03 ~06h40
+Dernière mise à jour : 2026-11-03 ~16h10
 
 ## Tâche en cours
-- **Rien en cours** — J3 terminé (commits 3cb8941 + d635509, tests verts).
-  Prochaine : recette J3 par Fabien, puis J4 (pare-feu commit-confirm) / J5 (paquets).
+- **J4 terminé côté code** (hub+agent+UI+migration 007). E2E validé sur le chemin
+  **failed** : sandbox sans CAP_NET_ADMIN → `nft` absent → l'agent échoue PROPREMENT
+  au snapshot (session fermée `failed`, pare-feu intact). Le chemin **confirm/rollback**
+  (snapshot réel → apply runtime → compte à rebours agent → confirm/rollback auto)
+  exige un hôte cible avec un vrai pare-feu — à recetter chez Fabien.
+- Prochaine : recette J3+J4 par Fabien, puis J5 (paquets), J3-restant (groupes CRUD, filtres).
+
+
+## J4 — Pare-feu commit-confirm (03/11 après-midi) ✅ code / 🔶 recette hôte réel
+Machine à états §3.5 sur l'AGENT (autorité du compte à rebours) :
+- **Snapshot → scellement → apply runtime → compte à rebours → confirm OU rollback**.
+- Le snapshot du ruleset runtime est scellé avec la **clé publique du site**
+  (AES-256-GCM + RSA-OAEP, `internal/cryptoutil/sitekey.go` : clé de site générée par
+  la centrale, clé privée JAMAIS envoyée au global) puis remonté au hub (`fw_snapshots`,
+  stockage opaque — le hub ne peut pas lire le ruleset).
+- L'agent applique en mode RUNTIME uniquement, ouvre une session live, démarre son
+  compte à rebours (défaut 300 s, max 3600). **Hub mort / WS coupé / timeout → rollback
+  immédiat** (fwRollbackAllOnDisconnect sur toute perte de canal). Une seule session live
+  par agent. Payload `FWApply` : SessionID, FWType, TTLSec, Rules, SitePubKey.
+- `agent/runtime/fwcommit.go` : startFWApply (bloquant), fwConfirm, fwRollback,
+  seams platformSnapshot/platformRestore/platformApply (indirection pour tests + hosts
+  sans CAP_NET_ADMIN). Tests `fwcommit_test.go` (fake platform) : snapshot scellé
+  récupérable avec la clé de site, rejet payload incomplet, rollback au timeout,
+  confirm ferme la session, rollback sur déconnexion.
+- Hub `hub/server/fw.go` : SiteKey() lazy (table site_keys), HandleHostFWApply
+  (valide rules/TTL/hosts.fw_type, 409 si session pending), HandleHostFWConfirm,
+  HandleHostFWSessions, HandleHostFWSnapshots, HandleHostFWSnapshotDownload,
+  jumeaux GET dev. `fw_apply` direct via POST /actions interdit (whitelist élargie
+  mais HandleHostActionCreate ne l'accepte pas — passe uniquement par /fw/apply).
+- **Race corrigée en E2E** : la ligne `fw_sessions` est insérée AVANT l'enqueue de
+  l'action (action_id nullable) — l'agent peut échouer en quelques ms et
+  completeFWSession doit toujours trouver sa ligne quand l'action_result arrive.
+- Migration 007 : `site_keys`, `fw_snapshots` (ciphertext+envelope+sha256, opaque),
+  `fw_sessions` (états pending_confirm|confirmed|rolled_back|failed + detail JSONB).
+- UI : panneau « Pare-feu — commit-confirm » sur host.html (type détecté, saisie
+  règles, TTL, Appliquer/Confirmer, compte à rebours, timeline sessions).
+- E2E (conteneur dev, agent fw_type forcé `AGENT_FORCE_FW_TYPE=nftables`) :
+  apply → 200 {action_id, session_id, ttl_s} → livraison → échec snapshot
+  (`nft` absent du sandbox, attendu) → action failed → session `failed` +
+  detail → API /fw/sessions reflète l'état. Le vrai pare-feu se teste sur hôte cible.
 
 ## J3 — Ping applicatif + file d'actions (03/11 matin)
 
@@ -403,7 +441,10 @@ Le proxy preview de la plateforme Bot applique une **CSP stricte** :
 - [x] **J3 — ping applicatif + file d'actions** ✅ (03/11 matin, commits 3cb8941 + d635509) :
       ping RTT hub-side sur WS agent (jamais ICMP), actions pending livrées à la reconnexion,
       whitelist inventory_refresh/pkg_list, UI « Actions distantes », fix Hijacker preview.
-- [ ] Puis J4 (FW commit-confirm), J5 (paquets),
+- [x] **J4 — pare-feu commit-confirm** ✅ (03/11 après-midi) : snapshot scellé clé de site,
+      apply runtime, compte à rebours AGENT (rollback si hub meurt / timeout), fw_sessions
+      timeline UI. E2E chemin failed validé ; chemin confirm à recetter sur hôte réel.
+- [ ] Puis J5 (paquets),
       J6 (maintenance), J7 (fleet), J8 (Windows), J9 (MFA forte/SSO), J10 (compose+Caddy).
 - [ ] Questions SPEC.md §13 restantes (non bloquantes pour J1/J2) : 1) stack frontend
       (proposition : HTML/JS sans build lourd), 4) périmètre agent Windows (winget seul ?).

@@ -162,6 +162,15 @@ func main() {
 	mux.Handle("GET /api/v1/hosts/{id}/actions", gate(srvHub.HandleHostActions))
 	mux.Handle("POST /api/v1/hosts/{id}/actions", gate(srvHub.HandleHostActionCreate))
 	mux.Handle("GET /dev/hosts/{id}/actions", gate(srvHub.HandleDevHostActionCreate))
+	// J4 — firewall commit-confirm (SPEC §3.5) + sealed snapshots (§6.3).
+	mux.Handle("POST /api/v1/hosts/{id}/fw/apply", gate(srvHub.HandleHostFWApply))
+	mux.Handle("POST /api/v1/hosts/{id}/fw/confirm", gate(srvHub.HandleHostFWConfirm))
+	mux.Handle("GET /api/v1/hosts/{id}/fw/sessions", gate(srvHub.HandleHostFWSessions))
+	mux.Handle("GET /api/v1/hosts/{id}/fw/snapshots", gate(srvHub.HandleHostFWSnapshots))
+	mux.Handle("GET /api/v1/fw/snapshots/{id}/download", gate(srvHub.HandleHostFWSnapshotDownload))
+	// Dev-only GET twins (the preview proxy forwards GET only).
+	mux.Handle("GET /dev/hosts/{id}/fw/apply", gate(srvHub.HandleDevHostFWApply))
+	mux.Handle("GET /dev/hosts/{id}/fw/confirm", gate(srvHub.HandleDevHostFWConfirm))
 	// Dev-only GET twins for the preview proxy (POST/PATCH blocked there).
 	mux.Handle("GET /dev/enroll/tokens", gate(srvHub.HandleDevCreateToken))
 	// Dev-only one-time session bridge (see dev_bridge.go).

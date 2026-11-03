@@ -218,7 +218,8 @@ func (s *Server) HandleHostActionCreate(w http.ResponseWriter, r *http.Request) 
 	}
 	switch req.Type {
 	case "inventory_refresh", "pkg_list":
-		// J3 whitelist — pkg_update/fw_apply arrive with J4/J5.
+		// J3 whitelist — pkg_update arrives with J5; fw_apply goes through
+		// HandleHostFWApply (it needs the fw_session row + site key).
 	default:
 		apiError(w, http.StatusBadRequest, "unknown action type "+req.Type)
 		return
@@ -271,15 +272,15 @@ func (s *Server) HandleHostActions(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	type act struct {
-		ID         string `json:"id"`
-		Type       string `json:"type"`
-		Status     string `json:"status"`
-		CreatedBy  string `json:"created_by"`
-		CreatedAt  string `json:"created_at"`
+		ID          string `json:"id"`
+		Type        string `json:"type"`
+		Status      string `json:"status"`
+		CreatedBy   string `json:"created_by"`
+		CreatedAt   string `json:"created_at"`
 		DeliveredAt string `json:"delivered_at"`
-		FinishedAt string `json:"finished_at"`
-		Result     string `json:"result"`
-		Err        string `json:"error"`
+		FinishedAt  string `json:"finished_at"`
+		Result      string `json:"result"`
+		Err         string `json:"error"`
 	}
 	out := []act{}
 	for rows.Next() {
@@ -362,10 +363,13 @@ func mustJSON(v any) json.RawMessage {
 	return raw
 }
 
-// validateActionType enforces the J3 action whitelist (the HTTP gate).
+// validateActionType enforces the action whitelist (the HTTP gate).
 func validateActionType(typ string) error {
 	switch typ {
-	case "inventory_refresh", "pkg_list":
+	case "inventory_refresh", "pkg_list", "fw_apply":
+		// fw_apply is J4: created only via HandleHostFWApply (session row +
+		// site key attached). Direct POST /actions with type fw_apply is
+		// still rejected at the HTTP layer — see HandleHostActionCreate.
 		return nil
 	default:
 		return fmt.Errorf("unknown action type %q", typ)

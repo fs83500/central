@@ -62,7 +62,9 @@ async function refresh() {
     <tr><td class="mono">${a.seq}</td><td class="mono">${esc(a.ts)}</td><td class="mono">${esc(a.actor)}</td><td>${esc(a.action)}</td>
     <td><span class="chip ${a.result === 'ok' ? 'ok' : 'crit'}">${esc(a.result)}</span></td><td class="mono">${esc((a.hash || '').slice(0, 12))}…</td></tr>`).join('');
   sHostStatus = h.status || '';
+  fwSetType(h.fw_type);
   loadActions();
+  loadFW();
   const u = await fetch(ugApi('api/v1/me')).then((r) => r.json());
   document.getElementById('user').textContent = u.email + ' · ' + u.role;
   initThemeFromServer(u.theme);
@@ -116,5 +118,117 @@ async function doInventory() {
 
 document.getElementById('btn-ping')?.addEventListener('click', doPing);
 document.getElementById('btn-inventory')?.addEventListener('click', doInventory);
+
+// ============================================================
+// J4 — Pare-feu commit-confirm (SPEC §3.5)
+// ============================================================
+let fwSession = null;   // pending session {id, deadline (epoch ms)}
+let fwTimerID = null;
+
+function fwSetType(t) {
+  document.getElementById('fw-type').textContent = t || 'inconnu';
+  document.getElementById('btn-fw-open').disabled = !t || t === 'none' || t === '';
+}
+
+async function loadFW() {
+  // Sessions
+  let r = await fetch(ugApi('api/v1/hosts/' + hostID + '/fw/sessions'));
+  if (r.status === 401) { location.href = 'login'; return; }
+  const d = await r.json().catch(() => ({ sessions: [] }));
+  const chip = (s) => `<span class="chip ${s === 'confirmed' ? 'ok' : (s === 'rolled_back' ? 'warn' : (s === 'failed' ? 'crit' : 'pending'))}">${esc(s)}</span>`;
+  document.getElementById('fwrows').innerHTML = (d.sessions || []).map((s) => `
+    <tr><td class="mono">${esc(s.id.slice(0, 8))}</td><td>${chip(s.state)}</td><td>${s.ttl_s}s</td>
+    <td class="mono">${esc(s.applied_at) || '—'}</td><td class="mono">${esc(s.confirmed_at) || '—'}</td>
+    <td class="mono">${esc(s.rolled_back_at) || '—'}</td>
+    <td class="mono sub">${esc((s.detail?.outcome || s.detail?.error || '').toString().slice(0, 80)) || '—'}</td></tr>`).join('')
+    || '<tr><td colspan="7" class="sub">Aucune session pare-feu.</td></tr>';
+  // Any pending session? → arm the countdown.
+  const pend = (d.sessions || []).find((s) => s.state === 'pending_confirm');
+  const btn = document.getElementById('btn-fw-confirm');
+  if (pend) {
+    fwSession = { id: pend.id, deadline: Date.now() + pend.ttl_s * 1000 };
+    btn.hidden = false;
+    if (!fwTimerID) fwTimerID = setInterval(fwTick, 1000);
+  } else {
+    fwSession = null;
+    btn.hidden = true;
+    if (fwTimerID) { clearInterval(fwTimerID); fwTimerID = null; }
+  }
+  // Snapshots
+  r = await fetch(ugApi('api/v1/hosts/' + hostID + '/fw/snapshots'));
+  const snaps = await r.json().catch(() => ({ snapshots: [] }));
+  document.getElementById('fwsnaprows').innerHTML = (snaps.snapshots || []).map((n) => `
+    <tr><td class="mono">${esc(n.id.slice(0, 8))}</td><td>${esc(n.fw_type)}</td>
+    <td class="mono sub">${esc((n.sha256 || '').slice(0, 16))}…</td><td>${fmtBytes(n.size_bytes)}</td>
+    <td class="mono">${esc(n.created_at)}</td>
+    <td><a class="btn small sec" href="api/v1/fw/snapshots/${esc(n.id)}/download${stParam()}" target="_blank">Télécharger</a></td></tr>`).join('')
+    || '<tr><td colspan="6" class="sub">Aucun snapshot.</td></tr>';
+}
+
+// stParam() — appends ?st=<session token> when running behind the dev
+// preview proxy (GET-only, cookies stripped).
+function stParam() {
+  const st = sessionStorage.getItem('ug-st');
+  return st ? `?st=${encodeURIComponent(st)}` : '';
+}
+
+function fwTick() {
+  if (!fwSession) return;
+  const left = Math.max(0, Math.round((fwSession.deadline - Date.now()) / 1000));
+  document.getElementById('fw-count').textContent = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+  if (left === 0) { loadFW(); }
+}
+
+async function doFWApply() {
+  const out = document.getElementById('fw-out');
+  const rulesTxt = document.getElementById('fw-rules').value.trim();
+  const ttl = parseInt(document.getElementById('fw-ttl').value, 10);
+  let rules;
+  try { rules = JSON.parse(rulesTxt); } catch (e) { out.textContent = 'JSON invalide : ' + e.message; return; }
+  if (!Array.isArray(rules) || !rules.length) { out.textContent = 'Le ruleset doit être un tableau JSON non vide.'; return; }
+  out.textContent = 'application…';
+  let r = await fetch(ugApi('api/v1/hosts/' + hostID + '/fw/apply'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rules, ttl_s: ttl }),
+  });
+  if (r.status === 405) {
+    // preview proxy → dev GET twin (rules in base64)
+    r = await fetch(ugApi(`dev/hosts/${hostID}/fw/apply?ttl_s=${ttl}&rules=${encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(rules)))))}`));
+  }
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) {
+    out.textContent = `session ${d.session_id.slice(0, 8)} — compte à rebours ${d.ttl_s}s enclenché`;
+    document.getElementById('fw-form').hidden = true;
+    loadFW();
+  } else {
+    out.textContent = d.error || 'échec de l\'application';
+  }
+}
+
+async function doFWConfirm() {
+  if (!fwSession) return;
+  const out = document.getElementById('fw-out');
+  out.textContent = 'confirmation…';
+  let r = await fetch(ugApi('api/v1/hosts/' + hostID + '/fw/confirm'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: fwSession.id }),
+  });
+  if (r.status === 405) {
+    r = await fetch(ugApi(`dev/hosts/${hostID}/fw/confirm?session_id=${encodeURIComponent(fwSession.id)}`));
+  }
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) { out.textContent = 'règles confirmées ✓'; loadFW(); }
+  else out.textContent = d.error || 'échec de la confirmation';
+}
+
+document.getElementById('btn-fw-open')?.addEventListener('click', () => {
+  document.getElementById('fw-form').hidden = !document.getElementById('fw-form').hidden;
+});
+document.getElementById('btn-fw-apply')?.addEventListener('click', doFWApply);
+document.getElementById('btn-fw-confirm')?.addEventListener('click', doFWConfirm);
+document.getElementById('btn-fw-cancel')?.addEventListener('click', () => {
+  document.getElementById('fw-form').hidden = true;
+});
+
 ugBridgeReady.then(refresh);
 setInterval(refresh, 10000);

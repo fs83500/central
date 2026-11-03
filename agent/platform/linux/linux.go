@@ -165,6 +165,13 @@ func Updates() []protocol.UpdateCandidate {
 // DetectFirewall returns the active firewall stack (read-only detection,
 // SPEC §3.2). Order: firewalld > ufw > nftables > iptables-legacy > none.
 func DetectFirewall() protocol.FirewallState {
+	// Dev/test override: simulate a stack in sandboxes that drop CAP_NET_ADMIN
+	// (AGENT_FORCE_FW_TYPE=nftables|ufw|firewalld|iptables-legacy — the
+	// apply will still fail on the real command, which exercises the
+	// commit-confirm FAILURE path end-to-end).
+	if t := os.Getenv("AGENT_FORCE_FW_TYPE"); t != "" {
+		return protocol.FirewallState{Type: t, Backend: t, Version: "forced (dev)", Active: true, Mode: "runtime"}
+	}
 	// firewalld: systemctl active + firewalld binary present
 	if active, _ := systemdActive("firewalld"); active {
 		return protocol.FirewallState{Type: "firewalld", Backend: "firewalld", Version: cmdVersion("firewall-cmd", "--version"), Active: true, Mode: "runtime"}

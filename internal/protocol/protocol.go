@@ -36,6 +36,7 @@ const (
 	TypeActionResult = "action_result" // agent → hub
 	TypeFWState      = "fw_state"      // agent → hub (canonical ruleset hash, drift N3)
 	TypeFWConfirm    = "fw_confirm"    // hub → agent (commit-confirm)
+	TypeFWSnapshot   = "fw_snapshot"   // agent → hub (encrypted ruleset snapshot, J4)
 	TypeEnroll       = "enroll"        // agent → hub (HTTP POST, not on the WS)
 )
 
@@ -136,4 +137,46 @@ type ActionResult struct {
 	Status string          `json:"status"` // done | failed | timeout | canceled
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
+}
+
+// FWApply is the fw_apply action payload (J4, SPEC §3.5). The agent applies
+// the rules in RUNTIME mode only, starts the countdown and rolls back to the
+// snapshot unless fw_confirm arrives before the deadline.
+type FWApply struct {
+	SessionID  string   `json:"session_id"`   // fw_sessions row
+	FWType     string   `json:"fw_type"`      // detected stack: nftables | ufw | firewalld | iptables-legacy
+	TTLSec     int      `json:"ttl_s"`        // countdown (default 300)
+	Rules      []FWRule `json:"rules"`        // the ruleset to apply
+	SitePubKey string   `json:"site_pub_key"` // PEM, to encrypt the snapshot up
+}
+
+// FWRule is one declarative rule (subset v1: allow/deny + ports).
+type FWRule struct {
+	Direction string `json:"direction"` // in | out
+	Action    string `json:"action"`    // allow | deny | reject
+	Proto     string `json:"proto"`     // tcp | udp | any
+	Port      string `json:"port"`      // "22", "80", "1000:2000", "" = any
+	Source    string `json:"source"`    // CIDR or "" = anywhere
+	Comment   string `json:"comment"`   // audit trail on the host
+}
+
+// FWSnapshot is the agent→hub encrypted ruleset snapshot (§6.3 envelope).
+// The hub stores it opaque: ciphertext = AES-256-GCM(plaintext ruleset),
+// wrapped_key = RSA-OAEP(data key, site public key). Only the site private
+// key (hub) can unwrap → the fleet/another hub sees noise.
+type FWSnapshot struct {
+	SessionID  string `json:"session_id"`
+	ActionID   string `json:"action_id"`
+	FWType     string `json:"fw_type"`     // nftables | firewalld | ufw | iptables-legacy
+	Ciphertext []byte `json:"ciphertext"`  // base64 in JSON
+	Nonce      []byte `json:"nonce"`       // AES-GCM nonce
+	WrappedKey []byte `json:"wrapped_key"` // RSA-OAEP(data key)
+	SHA256     string `json:"sha256"`      // digest of the PLAINTEXT (restore check)
+	SizeBytes  int    `json:"size_bytes"`
+}
+
+// FWConfirm is the hub→agent commit (SPEC §3.5 step 4). The agent keeps its
+// rules only if it receives this BEFORE its own deadline.
+type FWConfirm struct {
+	SessionID string `json:"session_id"`
 }

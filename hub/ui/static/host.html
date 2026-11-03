@@ -31,6 +31,45 @@
     <h1 id="hostname">…</h1>
     <p class="sub" id="hostsub"></p>
     <div class="cards" id="kpis"></div>
+    <div class="panel" id="fw-panel">
+      <h2>Pare-feu — commit-confirm</h2>
+      <p class="sub">Chaque application est <strong>réversible par défaut</strong> : l'agent photographie le ruleset actif, l'applique, puis attend votre confirmation. Sans « Confirmer » avant l'échéance (TTL), il <strong>rebascule automatiquement</strong> sur le snapshot. La pile détectée : <strong id="fw-type">…</strong></p>
+      <div class="actions-bar">
+        <button type="button" class="btn small" id="btn-fw-open" disabled>Appliquer un ruleset…</button>
+        <button type="button" class="btn small ok" id="btn-fw-confirm" hidden>Confirmer (<span id="fw-count">--:--</span>)</button>
+        <span class="sub" id="fw-out"></span>
+      </div>
+      <form id="fw-form" hidden>
+        <div class="grid2">
+          <label>Règles (JSON, tableau de règles FWRule — direction, action, port, proto, cidr)
+            <textarea id="fw-rules" rows="6" placeholder='[{"direction":"in","action":"allow","port":443,"proto":"tcp","cidr":"0.0.0.0/0"}]'></textarea>
+          </label>
+          <label>Compte à rebours avant retour arrière
+            <select id="fw-ttl">
+              <option value="60">1 minute (test)</option>
+              <option value="300" selected>5 minutes (défaut)</option>
+              <option value="900">15 minutes</option>
+              <option value="3600">1 heure (max)</option>
+            </select>
+          </label>
+        </div>
+        <div class="actions-bar">
+          <button type="button" class="btn small" id="btn-fw-apply">Appliquer (commence le compte à rebours)</button>
+          <button type="button" class="btn small sec" id="btn-fw-cancel">Annuler</button>
+          <span class="sub">Exemple : ouvrir le 443/TCP entrant → <code>{"direction":"in","action":"allow","port":443,"proto":"tcp","cidr":"0.0.0.0/0"}</code></span>
+        </div>
+      </form>
+      <table>
+        <thead><tr><th>Session</th><th>État</th><th>TTL</th><th>Appliquée</th><th>Confirmée</th><th>Retour arrière</th><th>Détail</th></tr></thead>
+        <tbody id="fwrows"></tbody>
+      </table>
+      <h3>Snapshots scellés (§6.3)</h3>
+      <p class="sub">Le ruleset capturé juste avant l'application, chiffré côté agent avec la clé publique du site (AES-256-GCM + RSA-OAEP). Le hub ne sait pas le déchiffrer en dehors d'un téléchargement explicite.</p>
+      <table>
+        <thead><tr><th>Snap</th><th>Pile</th><th>SHA-256</th><th>Taille</th><th>Créé</th><th></th></tr></thead>
+        <tbody id="fwsnaprows"></tbody>
+      </table>
+    </div>
     <div class="panel">
       <h2>Actions distantes</h2>
       <div class="actions-bar">

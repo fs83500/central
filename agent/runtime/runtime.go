@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"git.dpnac.cloud/dpnac/central/agent/enroll"
@@ -138,6 +139,12 @@ func runOnce(ctx context.Context, id *enroll.Identity, core protocol.HostCore, h
 					errCh <- err
 					return
 				}
+			case protocol.TypeFWConfirm:
+				// J4 commit-confirm: the hub says the rules may stay.
+				var c protocol.FWConfirm
+				if err := json.Unmarshal(env.Data, &c); err == nil {
+					fwConfirm(c.SessionID)
+				}
 			case protocol.TypeAction:
 				var act protocol.Action
 				if err := json.Unmarshal(env.Data, &act); err != nil {
@@ -151,7 +158,7 @@ func runOnce(ctx context.Context, id *enroll.Identity, core protocol.HostCore, h
 					return
 				}
 			default:
-				// fw_confirm etc. arrive with J4/J5.
+				// fw_state etc. arrive later (N3 drift).
 			}
 		}
 	}()
@@ -162,21 +169,36 @@ func runOnce(ctx context.Context, id *enroll.Identity, core protocol.HostCore, h
 			_ = ws.Close()
 			return ctx.Err()
 		case err := <-errCh:
+			// J4: an open commit-confirm session can never be confirmed
+			// once the channel is gone → immediate rollback (§3.5).
+			fwRollbackAllOnDisconnect()
 			return err
 		case <-hbT.C:
 			if err := sendEnvelope(ws, protocol.TypeHeartbeat, heartbeat(core)); err != nil {
+				fwRollbackAllOnDisconnect()
 				return err
 			}
 		case <-tickerChan(telT):
 			t, err := telemetry()
 			if err == nil {
 				if err := sendEnvelope(ws, protocol.TypeTelemetry, t); err != nil {
+					fwRollbackAllOnDisconnect()
 					return err
 				}
 			}
 		case <-tickerChan(invT):
 			i := protocol.Inventory{Packages: linux.Packages(), Updates: linux.Updates()}
 			if err := sendEnvelope(ws, protocol.TypeInventory, i); err != nil {
+				fwRollbackAllOnDisconnect()
+				return err
+			}
+		case snap, ok := <-sealedForHub:
+			// J4: sealed FW snapshot → hub (same agent-initiated channel).
+			if !ok {
+				continue
+			}
+			if err := sendEnvelope(ws, protocol.TypeFWSnapshot, snap); err != nil {
+				fwRollbackAllOnDisconnect()
 				return err
 			}
 		}
@@ -191,8 +213,8 @@ func tickerChan(t *time.Ticker) <-chan time.Time {
 }
 
 // runAction executes a hub-queued action and builds the terminal report.
-// J3 scope: inventory_refresh / pkg_list (read-only). pkg_update and fw_apply
-// arrive with J4/J5 and must never run from this build.
+// J3: inventory_refresh / pkg_list (read-only). J4: fw_apply runs the full
+// commit-confirm harness (agent-side countdown + auto rollback, SPEC §3.5).
 func runAction(act protocol.Action) protocol.ActionResult {
 	switch act.Type {
 	case "inventory_refresh", "pkg_list":
@@ -202,6 +224,12 @@ func runAction(act protocol.Action) protocol.ActionResult {
 			return protocol.ActionResult{ID: act.ID, Status: "failed", Error: "inventory marshal: " + err.Error()}
 		}
 		return protocol.ActionResult{ID: act.ID, Status: "done", Result: raw}
+	case "fw_apply":
+		var ap protocol.FWApply
+		if err := json.Unmarshal(act.Payload, &ap); err != nil {
+			return protocol.ActionResult{ID: act.ID, Status: "failed", Error: "fw_apply payload: " + err.Error()}
+		}
+		return *startFWApply(act, ap)
 	default:
 		return protocol.ActionResult{ID: act.ID, Status: "failed", Error: "unknown action type " + act.Type}
 	}
@@ -285,10 +313,17 @@ func wsDialer(id *enroll.Identity) *websocketDialer {
 
 // --- small wrappers to keep the API surface tiny --------------------------
 
-type wsConn struct{ c *websocket.Conn }
+type wsConn struct {
+	c  *websocket.Conn
+	mu sync.Mutex // gorilla: one concurrent writer max (reader vs. select loop)
+}
 
-func (w *wsConn) WriteJSON(v any) error { return w.c.WriteJSON(v) }
-func (w *wsConn) ReadJSON(v any) error  { return w.c.ReadJSON(v) }
+func (w *wsConn) WriteJSON(v any) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.c.WriteJSON(v)
+}
+func (w *wsConn) ReadJSON(v any) error { return w.c.ReadJSON(v) }
 func (w *wsConn) WriteControl(code int, data []byte, deadline time.Time) error {
 	return w.c.WriteControl(websocket.CloseMessage, nil, time.Now().Add(time.Second))
 }

@@ -38,6 +38,9 @@ type Server struct {
 	serial atomic.Int64
 	// agents: live agent WebSockets (J3 — ping + action delivery).
 	agents *agentRegistry
+	// siteKey: the site RSA pair (J4, SPEC §6.3) — lazy-loaded, private
+	// key never leaves this process except inside its own database.
+	siteKey *cryptoutil.SiteKey
 }
 
 // logDevMFA prints the login code in dev only (never in production builds
@@ -302,7 +305,16 @@ func (s *Server) handleAgentMessage(agentID string, env protocol.Envelope) error
 		if err := json.Unmarshal(env.Data, &res); err != nil {
 			return fmt.Errorf("action_result decode: %w", err)
 		}
+		// J4: fw_apply results also close the fw_sessions row.
+		s.completeFWSession(agentID, res)
 		return s.completeAction(agentID, res)
+	case protocol.TypeFWSnapshot:
+		// J4: sealed ruleset snapshot (§6.3) — stored opaque.
+		var snap protocol.FWSnapshot
+		if err := json.Unmarshal(env.Data, &snap); err != nil {
+			return fmt.Errorf("fw_snapshot decode: %w", err)
+		}
+		return s.storeFWSnapshot(agentID, snap)
 	default:
 		return fmt.Errorf("unknown message type %q", env.Type)
 	}

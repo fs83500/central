@@ -85,13 +85,15 @@ func TestPingLiveAgent(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = runtime.Run(ctx, id, runtime.Config{
-		HeartbeatEvery: 500 * time.Millisecond,
-		TelemetryEvery: time.Hour,
-		InventoryEvery: time.Hour,
-		MinBackoff:     time.Second,
-		MaxBackoff:     2 * time.Second,
-	}) }()
+	go func() {
+		_ = runtime.Run(ctx, id, runtime.Config{
+			HeartbeatEvery: 500 * time.Millisecond,
+			TelemetryEvery: time.Hour,
+			InventoryEvery: time.Hour,
+			MinBackoff:     time.Second,
+			MaxBackoff:     2 * time.Second,
+		})
+	}()
 
 	// Wait until the registry sees the live connection.
 	deadline := time.Now().Add(5 * time.Second)
@@ -148,13 +150,15 @@ func TestActionQueuedOfflineDeliveredOnReconnect(t *testing.T) {
 	id.HubURL = strings.Replace(wsURL, "/agent/v1/ws", "", 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = runtime.Run(ctx, id, runtime.Config{
-		HeartbeatEvery: time.Hour, // silent loop: no heartbeat noise
-		TelemetryEvery: time.Hour,
-		InventoryEvery: time.Hour,
-		MinBackoff:     time.Second,
-		MaxBackoff:     2 * time.Second,
-	}) }()
+	go func() {
+		_ = runtime.Run(ctx, id, runtime.Config{
+			HeartbeatEvery: time.Hour, // silent loop: no heartbeat noise
+			TelemetryEvery: time.Hour,
+			InventoryEvery: time.Hour,
+			MinBackoff:     time.Second,
+			MaxBackoff:     2 * time.Second,
+		})
+	}()
 
 	// 3. The action must be delivered then completed (done) by the agent.
 	deadline := time.Now().Add(8 * time.Second)
