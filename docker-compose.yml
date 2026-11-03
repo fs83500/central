@@ -1,17 +1,23 @@
 # UnifiedGuard.cloud — BETA (centrale locale)
-# docker compose up -d --build
+# docker compose up -d
 #
 # Services :
 #   db    — PostgreSQL 17 (données + audit chaîné), volume ug_db_data
 #   hub   — la centrale : UI dashboard + API + WS agents + migrations auto
+#           (image pré-buildée central-unified:latest — voir ci-dessous)
 #   agent — optionnel : un agent DANS le compose (démo/télémétrie de la
 #           centrale elle-même). Le pare-feu commit-confirm n'est PAS
 #           utilisable sur un agent conteneurisé (il doit voir le pare-feu
 #           de l'hôte) — pour le pare-feu, installez l'agent en natif.
 #
-# Premier lancement : copiez .env.example → .env, changez les mots de passe,
-# puis `docker compose up -d --build`. Le hub applique les migrations et
-# crée l'admin bootstrap automatiquement (voir logs : docker compose logs hub).
+# PREMIER LANCEMENT :
+#   1. docker load -i central-unified-latest.tar     ← importe central-unified:latest
+#   2. cp .env.example .env (mots de passe à changer)
+#   3. docker compose up -d
+#   4. docker compose logs hub | grep "BETA login code"   ← code MFA du 1er login
+#
+# (Pour construire l'image depuis la source : Dockerfile + `docker compose build`
+#  en décommentant la section build ci-dessous.)
 
 services:
   db:
@@ -32,13 +38,14 @@ services:
     # Exposez-le explicitement si vous voulez psql depuis l'extérieur.
 
   hub:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: hub
-      args:
-        COMMIT: ${GIT_COMMIT:-beta}
-        DATE: ${BUILD_DATE:-beta}
+    # Image pré-buildée (pas de build au premier `up` — bêta livraison).
+    # docker load -i central-unified-latest.tar   ← à faire UNE fois.
+    # (Le build depuis la source reste possible : voir Dockerfile + README-BETA.)
+    image: central-unified:latest
+    # build:                       # ← décommentez pour construire depuis la source
+    #   context: .
+    #   dockerfile: Dockerfile
+    #   target: hub
     restart: unless-stopped
     depends_on:
       db:
@@ -80,6 +87,9 @@ services:
   #   volumes:
   #     - ug_agent_data:/data
   #   # commande d'enrôlement (une fois) : voir README-BETA.md §Agent
+  #   # NB : l'agent est AUSSI dans l'image central-unified (binaire /app/agent),
+  #   #     la section build n'est utile que si vous ne passez pas par l'image
+  #   #     pré-buildée.
 
 volumes:
   ug_db_data:

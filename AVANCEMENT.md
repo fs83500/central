@@ -1,20 +1,23 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 BÊTA 0.1 LIVRÉE (03/11 soir) — J4 + compose + binaires, E2E TLS complet validé
+## Statut : 🎉 BÊTA 0.1 LIVRÉE + IMAGE DOCKER central-unified:latest (03/11 soir)
 
-Dernière mise à jour : 2026-11-03 ~16h32
+Dernière mise à jour : 2026-11-03 ~16h55
 
 ## Tâche en cours
-- **BÊTA 0.1 livrée** : archive `unifiedguard-beta-0.1.tar.gz` à la racine du projet
-  (sha256 `8ccd3a69…`, ~9,8 Mo) — code source complet + `docker-compose.yml` (db+hub) +
-  `Dockerfile` (build Go multi-stage, binaires déjà construits inclus dans `bin/`) +
-  `README-BETA.md` + `run-beta.sh` (lancement sans Docker) + `.env.example`.
-- E2E bêta validé dans le sandbox : DB vierge → migrations auto 001→007 → bootstrap admin →
-  login+MFA (code dans les logs, `HUB_MFA_LOG_BETA=1`) → enrollment token → agent natif
-  enrôlé en https self-signed (`UG_ENROLL_INSECURE=1`) → **WS mTLS** (client cert + CA
-  vérifiée) → heartbeat → hôte `online` → ping RTT → action inventory → audit chaîné OK.
-- Recette restante chez Fabien : `docker compose up -d --build` sur une vraie machine,
-  J4 confirm/rollback sur hôte avec pare-feu réel, preview UI.
+- **Image Docker pré-buildée livrée** : `central-unified-latest.tar` à la racine du projet
+  (sha256 `80e7f065…`, ~24 Mo, tags `central-unified:latest`/`central-unified:0.1`/
+  `ghcr.io/fs83500/central-unified:latest`). Image **FROM scratch** : binaire hub STATIQUE
+  (CGO_ENABLED=0, +agent +fleet embarqués), healthcheck intégré (`hub healthcheck` — pas de
+  curl dans scratch). `docker load -i central-unified-latest.tar` → `docker compose up -d`.
+- **compose passe à `image: central-unified:latest`** (build décommentable en option B).
+- Sandbox sans daemon Docker → image produite par **tools/mkimage** (nouveau, daemonless,
+  stdlib Go : docker-archive = config+manifest+layer, diff_id vérifié `fab6a641…`).
+- **hub healthcheck** : nouveau subcommand (GET /api/v1/ping, 3 essais, exit 0/1) — sert de
+  HEALTHCHECK Docker dans l'image scratch, testé OK (exit 0 quand le hub répond).
+- **Binaire statique validé** : serveur + migrations + ping OK depuis le layer extrait.
+- Archive `unifiedguard-beta-0.1.tar.gz` **régénérée** (19,6 Mo, sha256 `d27e4bd4…`) :
+  source + compose à jour + bin/ statiques + `central-unified-latest.tar` inclus.
 
 ## Livraison bêta (03/11 soir) ✅
 - **c1d5f4d** : docker-compose.yml (postgres 17 + hub, migrations auto au boot,
@@ -24,9 +27,7 @@ Dernière mise à jour : 2026-11-03 ~16h32
 - **Migrations unifiées** : SQL déplacé vers `internal/migrations/sql/hub/` (go:embed,
   appliquées automatiquement au boot sauf `HUB_MIGRATIONS=off`), `migrations/hub/`
   garde un README pointeur (Makefile psql mis à jour).
-- **bin/ construits avec version** (hub 12 Mo, agent 6,6 Mo, fleet 5,8 Mo, ldflags
-  commit+date) — inclus dans l'archive pour un `run-beta.sh` sans compilation Go.
-- gitignore : `bin/`, `/data/`, `*.tar.gz` (artefacts de livraison hors git).
+- gitignore : `bin/`, `/data/`, `*.tar.gz`, `central-unified-latest.tar*`.
 
 ## J4 — Pare-feu commit-confirm (03/11 après-midi) ✅ code / 🔶 recette hôte réel
 Machine à états §3.5 sur l'AGENT (autorité du compte à rebours) :

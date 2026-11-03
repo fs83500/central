@@ -29,6 +29,12 @@ import (
 )
 
 func main() {
+	// `hub healthcheck` — Docker HEALTHCHECK helper (scratch image has no
+	// curl/wget): GET /ping on the listener, exit 0/1. Cheap and zero-dep.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck(getenv("HUB_LISTEN", ":8080")))
+	}
+
 	addr := getenv("HUB_LISTEN", ":8080")
 	dsn := getenv("HUB_DATABASE", "")
 	domain := getenv("HUB_DOMAIN", "central.acme.fr")
@@ -344,6 +350,29 @@ func getenv(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// healthcheck polls the local /api/v1/ping endpoint (used by the Docker
+// HEALTHCHECK on images that ship no curl — e.g. scratch). 3 tries.
+func healthcheck(addr string) int {
+	host := addr
+	if strings.HasPrefix(host, ":") {
+		host = "127.0.0.1" + host
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	for i := 0; i < 3; i++ {
+		resp, err := client.Get("http://" + host + "/api/v1/ping")
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return 0
+			}
+		}
+		if i < 2 {
+			time.Sleep(time.Second)
+		}
+	}
+	return 1
 }
 
 // tlsDir is where HUB_DEV_TLS=1 writes the self-signed cert/key.

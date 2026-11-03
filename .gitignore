@@ -19,3 +19,6 @@ coverage.*
 # Beta delivery artifacts (archives kept out of git — download from the sandbox)
 *.tar.gz
 *.tar.gz.sha256
+# docker image archives (delivery artifacts — downloaded from the sandbox, not in git)
+central-unified-latest.tar
+central-unified-latest.tar.sha256

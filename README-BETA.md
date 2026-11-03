@@ -3,6 +3,11 @@
 **Contenu** : la centrale (hub) complète avec dashboard web, agents Linux, et la console
 SaaS (squelette). Version du code : commit Git + date de build (voir `/api/v1/ping`).
 
+**Fichiers de livraison** (à côté de ce README) :
+- `central-unified-latest.tar` — image Docker pré-buildée (`central-unified:latest`,
+  ~24 Mo, `FROM scratch`) : `docker load -i central-unified-latest.tar` puis
+  `docker compose up -d` (aucun build requis).
+
 ## Ce qui marche (testé E2E)
 
 - **Dashboard** : login e-mail + mot de passe (Argon2id) + code MFA, thèmes clair/sombre/auto,
@@ -30,11 +35,33 @@ SaaS (squelette). Version du code : commit Git + date de build (voir `/api/v1/pi
 
 ## Démarrage express (Docker)
 
+### Option A — image pré-buildée (recommandée pour la bêta)
+
 ```bash
+# 1. Importez l'image (une seule fois — fournie dans la livraison) :
+docker load -i central-unified-latest.tar        # → central-unified:latest
+
+# 2. Configurez :
 cp .env.example .env
 # éditez .env : POSTGRES_PASSWORD, HUB_BOOTSTRAP_PASSWORD, HUB_DOMAIN…
-docker compose up -d --build
+
+# 3. Démarrez (AUCUN build — l'image est déjà prête) :
+docker compose up -d
 docker compose logs hub        # suivez : migrations 001→007, bootstrap admin
+```
+
+L'image `central-unified:latest` est `FROM scratch` (~24 Mo) : binaire hub
+statique + agent + fleet embarqués, healthcheck intégré (`hub healthcheck`,
+sans curl). Tags aussi disponibles : `central-unified:0.1`,
+`ghcr.io/fs83500/central-unified:latest` (prêt pour un push registry).
+
+### Option B — construire depuis la source
+
+Décommentez la section `build:` du service `hub` dans `docker-compose.yml`
+puis :
+
+```bash
+docker compose up -d --build
 ```
 
 Ouvrez `http://<serveur>:8080/` :
@@ -89,6 +116,7 @@ WantedBy=multi-user.target
 compose (docker)
 ├── db     PostgreSQL 17 — données + audit chaîné (volume ug_db_data)
 ├── hub    centrale : UI + API + WS agents + CA mTLS + migrations auto
+│          (image central-unified:latest — FROM scratch, statique)
 └── agent  (optionnel, décommenter) — agent de démo conteneurisé
 ```
 
