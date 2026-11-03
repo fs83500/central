@@ -5,6 +5,7 @@ package server
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -46,6 +47,10 @@ func apiError(w http.ResponseWriter, code int, msg string) {
 // HandleLogin is step 1 of the SPEC §4.1 flow: e-mail + Argon2id password →
 // MFA code e-mailed. 429 when throttled (5 failures → backoff).
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil {
+		apiError(w, http.StatusServiceUnavailable, "HUB_DATABASE not configured")
+		return
+	}
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -99,12 +104,22 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"mfa_required": true, "dev_mfa_code": code})
 		return
 	}
+	// BETA ONLY: outbound SMTP lands with J9. Until then the one-time code
+	// is written to the hub log so an operator can complete step 2 — the
+	// env flag makes the exposure explicit (refuse to run silently).
+	if s.MFALogBeta {
+		log.Printf("BETA login code for %s (SMTP arrives with J9): %s", req.Email, code)
+	}
 	s.auditUser(req.Email, "login.step1", "ok", req.Email, `{}`)
 	writeJSON(w, map[string]any{"mfa_required": true})
 }
 
 // HandleMFA is step 2: verify the e-mailed code → session cookie.
 func (s *Server) HandleMFA(w http.ResponseWriter, r *http.Request) {
+	if s.DB == nil {
+		apiError(w, http.StatusServiceUnavailable, "HUB_DATABASE not configured")
+		return
+	}
 	var req struct {
 		Email string `json:"email"`
 		Code  string `json:"code"`

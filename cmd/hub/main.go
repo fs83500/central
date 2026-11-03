@@ -7,6 +7,7 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"git.dpnac.cloud/dpnac/central/hub/ui"
 	"git.dpnac.cloud/dpnac/central/internal/audit"
 	"git.dpnac.cloud/dpnac/central/internal/cryptoutil"
+	"git.dpnac.cloud/dpnac/central/internal/migrations"
 	"git.dpnac.cloud/dpnac/central/internal/store"
 	"git.dpnac.cloud/dpnac/central/internal/version"
 )
@@ -46,6 +48,14 @@ func main() {
 		if auditStore, err = audit.NewPGStore(dsn); err != nil {
 			log.Fatalf("hub: audit store: %v", err)
 		}
+		// Beta: apply embedded migrations at boot unless the operator keeps
+		// manual control (HUB_MIGRATIONS=off — the Makefile path stays
+		// available for schema-diff review in staging).
+		if os.Getenv("HUB_MIGRATIONS") != "off" {
+			if err := migrations.ApplyHub(db); err != nil {
+				log.Fatalf("hub: migrations: %v", err)
+			}
+		}
 		// The internal CA is persisted on the volume when HUB_CA_DIR is set
 		// (dev/demo); in-memory per process otherwise (prod keys volume: J10).
 		caDir := getenv("HUB_CA_DIR", "")
@@ -58,7 +68,8 @@ func main() {
 		}
 	}
 
-	srvHub := &server.Server{DB: db, CA: ca, Audit: auditStore, Domain: domain, Quota: 5, DevMode: dev}
+	srvHub := &server.Server{DB: db, CA: ca, Audit: auditStore, Domain: domain, Quota: 5, DevMode: dev,
+		MFALogBeta: !dev && os.Getenv("HUB_MFA_LOG_BETA") == "1"}
 
 	// Standalone-TLS mode: trust agent certs signed by the internal CA.
 	var clientCAs *x509.CertPool
@@ -150,8 +161,24 @@ func main() {
 
 	// Session-gated API + pages. In dev the ?st= query param carries the
 	// session when cookies are stripped by the sandbox preview proxy.
-	requireUser := auth.RequireUser(db.SQL, nil, dev)
+	// db is nil when HUB_DATABASE is empty: the mux below returns 503 for
+	// every DB-backed route (a hub without a configured database answers
+	// /ping and nothing else — it must never panic on nil *sql.DB).
+	var dbSQL *sql.DB
+	if db != nil {
+		dbSQL = db.SQL
+	}
+	requireUser := auth.RequireUser(dbSQL, nil, dev)
 	gate := func(h http.HandlerFunc) http.Handler { return requireUser(http.HandlerFunc(h)) }
+	if dbSQL == nil {
+		gate = func(http.HandlerFunc) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"error":"HUB_DATABASE not configured"}` + "\n"))
+			})
+		}
+	}
 
 	mux.Handle("GET /api/v1/me", gate(srvHub.HandleMe))
 	mux.Handle("PATCH /api/v1/me/theme", gate(srvHub.HandleSetTheme))
@@ -226,6 +253,27 @@ func main() {
 			log.Printf("hub: dev admin: %v", err)
 		} else {
 			log.Printf("DEV admin ready: %s (activate via /login + MFA dev code in logs)", email)
+		}
+	}
+	// Production bootstrap (beta): HUB_BOOTSTRAP_ADMIN + HUB_BOOTSTRAP_PASSWORD
+	// create the first owner on first boot ONLY if the users table is empty,
+	// and the printed MFA code is logged once. Remove once J9 mail lands.
+	// Safety: the password is cleared from the process env after bootstrap.
+	if !dev && db != nil {
+		if email := os.Getenv("HUB_BOOTSTRAP_ADMIN"); email != "" {
+			pw := os.Getenv("HUB_BOOTSTRAP_PASSWORD")
+			var n int
+			_ = db.QueryRow(`SELECT count(*) FROM hub_users`).Scan(&n)
+			if n == 0 && pw != "" {
+				if err := server.BootstrapDevUser(db, email, pw); err != nil {
+					log.Printf("hub: bootstrap admin: %v", err)
+				} else {
+					log.Printf("hub: bootstrap admin ready: %s (change the password after first login)", email)
+					_ = os.Unsetenv("HUB_BOOTSTRAP_PASSWORD")
+				}
+			} else if n > 0 {
+				log.Printf("hub: bootstrap admin skipped (hub_users not empty)")
+			}
 		}
 	}
 

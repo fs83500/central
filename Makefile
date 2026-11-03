@@ -49,7 +49,7 @@ lint-install:
 ## migrate-hub / migrate-fleet — apply migrations with psql (dev only;
 ## production: the hub container runs embedded migrations at startup)
 migrate-hub:
-	psql "$(DSN)" -f migrations/hub/001_skeleton.sql
+	psql "$(DSN)" -f internal/migrations/sql/hub/001_skeleton.sql
 
 migrate-fleet:
 	psql "$(DSN)" -f migrations/fleet/001_users.sql

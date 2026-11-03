@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // DB is a thin wrapper around *sql.DB.

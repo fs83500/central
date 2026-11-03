@@ -1,0 +1,87 @@
+# UnifiedGuard.cloud — BETA (centrale locale)
+# docker compose up -d --build
+#
+# Services :
+#   db    — PostgreSQL 17 (données + audit chaîné), volume ug_db_data
+#   hub   — la centrale : UI dashboard + API + WS agents + migrations auto
+#   agent — optionnel : un agent DANS le compose (démo/télémétrie de la
+#           centrale elle-même). Le pare-feu commit-confirm n'est PAS
+#           utilisable sur un agent conteneurisé (il doit voir le pare-feu
+#           de l'hôte) — pour le pare-feu, installez l'agent en natif.
+#
+# Premier lancement : copiez .env.example → .env, changez les mots de passe,
+# puis `docker compose up -d --build`. Le hub applique les migrations et
+# crée l'admin bootstrap automatiquement (voir logs : docker compose logs hub).
+
+services:
+  db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-unifiedguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+      POSTGRES_DB: ${POSTGRES_DB:-unifiedguard}
+    volumes:
+      - ug_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-unifiedguard} -d ${POSTGRES_DB:-unifiedguard}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    # Le port 5432 n'est PAS publié : la base ne doit pas fuiter sur le LAN.
+    # Exposez-le explicitement si vous voulez psql depuis l'extérieur.
+
+  hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: hub
+      args:
+        COMMIT: ${GIT_COMMIT:-beta}
+        DATE: ${BUILD_DATE:-beta}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HUB_LISTEN: ":8080"
+      HUB_DOMAIN: ${HUB_DOMAIN:-central.localhost}
+      HUB_DATABASE: postgres://${POSTGRES_USER:-unifiedguard}:${POSTGRES_PASSWORD:-CHANGE_ME}@db:5432/${POSTGRES_DB:-unifiedguard}?sslmode=disable
+      # Migrations embarquées appliquées à chaque boot (idempotentes).
+      HUB_MIGRATIONS: "on"
+      # Premier admin (créé UNIQUEMENT si la table hub_users est vide).
+      HUB_BOOTSTRAP_ADMIN: ${HUB_BOOTSTRAP_ADMIN:-admin@beta.local}
+      HUB_BOOTSTRAP_PASSWORD: ${HUB_BOOTSTRAP_PASSWORD:-CHANGE_ME_TOO}
+      # BETA : le code de login MFA (mail = J9) est écrit dans les logs du hub.
+      # docker compose logs hub | grep "BETA login code"
+      HUB_MFA_LOG_BETA: "1"
+      # Volume de clés persistant : CA agents + clé de site (backups §6.3).
+      HUB_CA_DIR: /data/ca
+      HUB_SITE_KEY_DIR: /data/sitekey
+    volumes:
+      - ug_hub_data:/data
+    ports:
+      # Dashboard + API. En production derrière Caddy/Traefik avec TLS.
+      - "${HUB_PORT:-8080}:8080"
+
+  # Optionnel (décommentez) : agent de démonstration qui s'enrôle tout seul
+  # et rapporte la télémétrie de la centrale. Générez un token dans l'UI
+  # (/enroll) puis renseignez AGENT_TOKEN ci-dessous.
+  # agent:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: agent
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - hub
+  #   environment:
+  #     AGENT_STATE_DIR: /data
+  #   volumes:
+  #     - ug_agent_data:/data
+  #   # commande d'enrôlement (une fois) : voir README-BETA.md §Agent
+
+volumes:
+  ug_db_data:
+  ug_hub_data:
+  ug_agent_data:

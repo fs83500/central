@@ -77,6 +77,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS audit_chain ON audit_events;
 CREATE TRIGGER audit_chain BEFORE INSERT ON audit_events
 FOR EACH ROW EXECUTE FUNCTION ug_audit_hash();
 

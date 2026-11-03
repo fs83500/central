@@ -34,6 +34,10 @@ type Server struct {
 	Quota int32
 	// DevMode: log the MFA code instead of e-mailing it (J2 dev; SMTP in J9).
 	DevMode bool
+	// MFALogBeta: BETA bridge — until J9 SMTP lands, the one-time login code
+	// is written to the hub log so an operator can finish step 2. The env
+	// flag HUB_MFA_LOG_BETA=1 makes the exposure explicit; never in GA.
+	MFALogBeta bool
 
 	serial atomic.Int64
 	// agents: live agent WebSockets (J3 — ping + action delivery).
@@ -70,6 +74,10 @@ type enrollResp struct {
 func (s *Server) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.DB == nil {
+		apiError(w, http.StatusServiceUnavailable, "HUB_DATABASE not configured")
 		return
 	}
 	var req enrollReq

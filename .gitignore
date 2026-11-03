@@ -12,3 +12,6 @@ coverage.*
 .DS_Store
 # Dev screenshots / E2E artifacts
 .shots/
+
+# run-beta.sh local state (CA, site key, TLS certs)
+/data/
