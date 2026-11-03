@@ -4,7 +4,11 @@
 // against the stripped path and the browser would land outside the prefix.
 package main
 
-import "net/http"
+import (
+	"bufio"
+	"net"
+	"net/http"
+)
 
 type prefixedRedirect struct {
 	http.ResponseWriter
@@ -16,4 +20,22 @@ func (w *prefixedRedirect) WriteHeader(code int) {
 		w.Header().Set("Location", w.prefix+loc)
 	}
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack forwards to the underlying ResponseWriter. The agent WebSocket
+// (gorilla) needs to hijack the TCP connection for the upgrade; without
+// this method the type assertion inside gorilla fails and the WS returns
+// a silent 500 behind the preview prefix wrapper.
+func (w *prefixedRedirect) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
+}
+
+// Flush forwards to the underlying ResponseWriter when it supports it.
+func (w *prefixedRedirect) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }

@@ -3,6 +3,9 @@
 initTheme();
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+// J3 — host status captured at refresh (for the offline-queue hint).
+let sHostStatus = '';
+
 // Host id from the query param (?id=<uuid>) — the page is served at
 // /hosts?id=… so the relative-asset trick works behind any proxy prefix
 // (sandbox preview, Caddy…) as well as at the root in production.
@@ -58,9 +61,60 @@ async function refresh() {
   document.getElementById('arows').innerHTML = (h.audit || []).map((a) => `
     <tr><td class="mono">${a.seq}</td><td class="mono">${esc(a.ts)}</td><td class="mono">${esc(a.actor)}</td><td>${esc(a.action)}</td>
     <td><span class="chip ${a.result === 'ok' ? 'ok' : 'crit'}">${esc(a.result)}</span></td><td class="mono">${esc((a.hash || '').slice(0, 12))}…</td></tr>`).join('');
+  sHostStatus = h.status || '';
+  loadActions();
   const u = await fetch(ugApi('api/v1/me')).then((r) => r.json());
   document.getElementById('user').textContent = u.email + ' · ' + u.role;
   initThemeFromServer(u.theme);
 }
+
+// J3 — actions distantes : ping applicatif + file d'actions.
+async function loadActions() {
+  const r = await fetch(ugApi('api/v1/hosts/' + hostID + '/actions'));
+  if (r.status === 401) { location.href = 'login'; return; }
+  const d = await r.json();
+  const chip = (s) => `<span class="chip ${s === 'done' ? 'ok' : (s === 'failed' || s === 'timeout' ? 'crit' : (s === 'delivered' ? 'warn' : 'off'))}">${esc(s)}</span>`;
+  document.getElementById('actrows').innerHTML = (d.actions || []).map((a) => `
+    <tr><td>${esc(a.type)}</td><td>${chip(a.status)}</td><td class="mono">${esc(a.created_by)}</td>
+    <td class="mono">${esc(a.created_at)}</td><td class="mono">${esc(a.delivered_at) || '—'}</td>
+    <td class="mono">${esc(a.finished_at) || '—'}</td>
+    <td class="mono sub">${esc((a.error || a.result || '').toString().slice(0, 60)) || '—'}</td></tr>`).join('')
+    || '<tr><td colspan="7" class="sub">Aucune action.</td></tr>';
+}
+
+async function doPing() {
+  const out = document.getElementById('ping-out');
+  out.textContent = 'ping…';
+  let r = await fetch(ugApi('api/v1/hosts/' + hostID + '/ping'), { method: 'POST' });
+  if (r.status === 405) {
+    // preview proxy forwards GET only → dev-only GET twin
+    r = await fetch(ugApi('dev/hosts/' + hostID + '/ping'));
+  }
+  if (r.status === 401) { location.href = 'login'; return; }
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) { out.textContent = `RTT ${d.rtt_ms} ms`; refresh(); }
+  else out.textContent = d.error || 'échec du ping';
+}
+
+async function doInventory() {
+  const out = document.getElementById('ping-out');
+  out.textContent = 'action empilée…';
+  // Normal POST path; preview proxy fallback → dev GET twin.
+  let r = await fetch(ugApi('api/v1/hosts/' + hostID + '/actions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'inventory_refresh' }) });
+  if (r.status === 405) {
+    r = await fetch(ugApi('dev/hosts/' + hostID + '/actions', { type: 'inventory_refresh' }));
+  }
+  if (r.status === 401) { location.href = 'login'; return; }
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) {
+    out.textContent = (d.status === 'pending' && sHostStatus !== 'online')
+      ? 'hôte hors-ligne : livrée à sa reconnexion'
+      : 'envoyée à l\'agent';
+    setTimeout(loadActions, 400);
+  } else out.textContent = d.error || 'échec';
+}
+
+document.getElementById('btn-ping')?.addEventListener('click', doPing);
+document.getElementById('btn-inventory')?.addEventListener('click', doInventory);
 ugBridgeReady.then(refresh);
 setInterval(refresh, 10000);

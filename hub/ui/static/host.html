@@ -32,6 +32,19 @@
     <p class="sub" id="hostsub"></p>
     <div class="cards" id="kpis"></div>
     <div class="panel">
+      <h2>Actions distantes</h2>
+      <div class="actions-bar">
+        <button type="button" class="btn small" id="btn-ping">Ping applicatif</button>
+        <button type="button" class="btn small sec" id="btn-inventory">Rafraîchir l'inventaire</button>
+        <span class="sub" id="ping-out"></span>
+      </div>
+      <table>
+        <thead><tr><th>Action</th><th>Statut</th><th>Créée par</th><th>Créée</th><th>Livrée</th><th>Terminée</th><th>Résultat</th></tr></thead>
+        <tbody id="actrows"></tbody>
+      </table>
+      <p class="sub">Les actions créées alors que l'hôte est hors-ligne restent <em>pending</em> et sont livrées automatiquement à sa reconnexion — le hub n'initie jamais de connexion vers l'agent.</p>
+    </div>
+    <div class="panel">
       <h2>Télémétrie — 24 h</h2>
       <div id="chart"></div>
       <div class="legend"><span><i class="leg-acc"></i>CPU %</span><span><i class="leg-ok"></i>RAM %</span><span><i class="leg-grid"></i>grille</span></div>

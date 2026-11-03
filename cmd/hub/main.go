@@ -158,6 +158,7 @@ func main() {
 	mux.Handle("GET /api/v1/hosts", gate(srvHub.HandleHosts))
 	mux.Handle("GET /api/v1/hosts/{id}", gate(srvHub.HandleHost))
 	mux.Handle("POST /api/v1/hosts/{id}/ping", gate(srvHub.HandleHostPing))
+	mux.Handle("GET /dev/hosts/{id}/ping", gate(srvHub.HandleDevHostPing))
 	mux.Handle("GET /api/v1/hosts/{id}/actions", gate(srvHub.HandleHostActions))
 	mux.Handle("POST /api/v1/hosts/{id}/actions", gate(srvHub.HandleHostActionCreate))
 	mux.Handle("GET /dev/hosts/{id}/actions", gate(srvHub.HandleDevHostActionCreate))

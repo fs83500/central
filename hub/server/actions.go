@@ -271,7 +271,15 @@ func (s *Server) HandleHostActions(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	type act struct {
-		ID, Type, Status, CreatedBy, CreatedAt, DeliveredAt, FinishedAt, Result, Err string
+		ID         string `json:"id"`
+		Type       string `json:"type"`
+		Status     string `json:"status"`
+		CreatedBy  string `json:"created_by"`
+		CreatedAt  string `json:"created_at"`
+		DeliveredAt string `json:"delivered_at"`
+		FinishedAt string `json:"finished_at"`
+		Result     string `json:"result"`
+		Err        string `json:"error"`
 	}
 	out := []act{}
 	for rows.Next() {
@@ -285,6 +293,35 @@ func (s *Server) HandleHostActions(w http.ResponseWriter, r *http.Request) {
 		out = append(out, a)
 	}
 	writeJSON(w, map[string]any{"actions": out})
+}
+
+// HandleDevHostPing is the dev-only GET twin of the ping (preview proxy
+// forwards GET only). Same auth, same audit, same golden rule.
+func (s *Server) HandleDevHostPing(w http.ResponseWriter, r *http.Request) {
+	if !s.DevMode {
+		apiError(w, http.StatusNotFound, "not found")
+		return
+	}
+	u := auth.FromContext(r.Context())
+	if u == nil {
+		apiError(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	agentID := r.PathValue("id")
+	rtt, err := s.SendPing(agentID)
+	if err != nil {
+		apiError(w, http.StatusConflict, err.Error())
+		return
+	}
+	params, _ := json.Marshal(map[string]any{"rtt_ms": rtt})
+	if _, aerr := s.Audit.Append(audit.Event{
+		Actor: u.Email, ActorType: "user", Action: "host.ping",
+		TargetType: "host", TargetID: agentID, Result: "ok",
+		Params: params,
+	}); aerr != nil {
+		log.Printf("audit: host.ping: %v", aerr)
+	}
+	writeJSON(w, map[string]any{"ok": true, "rtt_ms": rtt})
 }
 
 // HandleDevHostActionCreate is the dev-only GET twin (preview proxy blocks POST).
