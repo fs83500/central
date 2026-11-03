@@ -157,6 +157,10 @@ func main() {
 	mux.Handle("PATCH /api/v1/me/theme", gate(srvHub.HandleSetTheme))
 	mux.Handle("GET /api/v1/hosts", gate(srvHub.HandleHosts))
 	mux.Handle("GET /api/v1/hosts/{id}", gate(srvHub.HandleHost))
+	mux.Handle("POST /api/v1/hosts/{id}/ping", gate(srvHub.HandleHostPing))
+	mux.Handle("GET /api/v1/hosts/{id}/actions", gate(srvHub.HandleHostActions))
+	mux.Handle("POST /api/v1/hosts/{id}/actions", gate(srvHub.HandleHostActionCreate))
+	mux.Handle("GET /dev/hosts/{id}/actions", gate(srvHub.HandleDevHostActionCreate))
 	// Dev-only GET twins for the preview proxy (POST/PATCH blocked there).
 	mux.Handle("GET /dev/enroll/tokens", gate(srvHub.HandleDevCreateToken))
 	// Dev-only one-time session bridge (see dev_bridge.go).

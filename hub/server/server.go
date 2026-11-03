@@ -36,6 +36,8 @@ type Server struct {
 	DevMode bool
 
 	serial atomic.Int64
+	// agents: live agent WebSockets (J3 — ping + action delivery).
+	agents *agentRegistry
 }
 
 // logDevMFA prints the login code in dev only (never in production builds
@@ -197,6 +199,26 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = ws.Close() }()
 
+	// Register the live connection (J3: ping + action delivery). The send
+	// queue is drained by a writer goroutine — gorilla forbids concurrent
+	// writers, and ping/action pushes arrive from HTTP handlers.
+	if s.agents == nil {
+		s.agents = newRegistry()
+	}
+	c := s.agents.add(agentID, ws)
+	defer s.agents.remove(agentID, c)
+	writes := make(chan error, 1)
+	go func() {
+		for raw := range c.send {
+			if err := ws.WriteMessage(websocket.TextMessage, raw); err != nil {
+				writes <- err
+				return
+			}
+		}
+		writes <- nil
+	}()
+	defer func() { close(c.send) }()
+
 	log.Printf("ws: agent %s connected from %s", agentID, r.RemoteAddr)
 	_, err = s.DB.Exec(`UPDATE hosts SET status = 'online', last_seen = now() WHERE id = $1`, agentID)
 	if err != nil {
@@ -207,6 +229,10 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		_, _ = s.DB.Exec(`UPDATE hosts SET status = 'offline' WHERE id = $1`, agentID)
 		log.Printf("ws: agent %s disconnected", agentID)
 	}()
+
+	// J3 — deliver queued actions to a freshly (re)connected agent (idea n°2:
+	// actions created while offline wait in `pending` and resume here).
+	s.deliverPendingActions(agentID, c)
 
 	for {
 		var env protocol.Envelope
@@ -220,7 +246,8 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAgentMessage stores heartbeat/telemetry/inventory payloads.
+// handleAgentMessage stores heartbeat/telemetry/inventory payloads and
+// resolves pongs (J3 RTT) and action results (J3 action queue).
 func (s *Server) handleAgentMessage(agentID string, env protocol.Envelope) error {
 	switch env.Type {
 	case protocol.TypeHeartbeat:
@@ -262,7 +289,20 @@ func (s *Server) handleAgentMessage(agentID string, env protocol.Envelope) error
 		})
 		return err
 	case protocol.TypePong:
-		return nil // RTT computed hub-side in J3
+		// RTT is measured hub-side (SPEC §2.3): sent time is waitPong's,
+		// so the pong's own clock never matters (agents stay untrusted).
+		var p protocol.Pong
+		if err := json.Unmarshal(env.Data, &p); err != nil {
+			return fmt.Errorf("pong decode: %w", err)
+		}
+		resolvePong(p.Ref, time.Since(pongSent(p.Ref)).Milliseconds())
+		return nil
+	case protocol.TypeActionResult:
+		var res protocol.ActionResult
+		if err := json.Unmarshal(env.Data, &res); err != nil {
+			return fmt.Errorf("action_result decode: %w", err)
+		}
+		return s.completeAction(agentID, res)
 	default:
 		return fmt.Errorf("unknown message type %q", env.Type)
 	}

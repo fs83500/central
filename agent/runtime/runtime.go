@@ -119,8 +119,9 @@ func runOnce(ctx context.Context, id *enroll.Identity, core protocol.HostCore, h
 	}
 
 	errCh := make(chan error, 4)
-	// Reader goroutine: consumes hub messages (ping/action/...). J1: only
-	// pong-less ping answers + discard unknown. Actions arrive in J3.
+	// Reader goroutine: consumes hub messages (ping/action/...). Actions
+	// (J3): inventory_refresh executes the collector and reports the
+	// result on the same socket; unknown types are ignored (fwd compat).
 	go func() {
 		for {
 			var env protocol.Envelope
@@ -132,14 +133,25 @@ func runOnce(ctx context.Context, id *enroll.Identity, core protocol.HostCore, h
 			case protocol.TypePing:
 				pong := protocol.Pong{Ref: env.ID}
 				data, _ := json.Marshal(pong)
-				_ = ws.WriteControl(0, nil, time.Time{}) // keepalive no-op
 				out := protocol.Envelope{V: protocol.V, ID: env.ID, Type: protocol.TypePong, TS: time.Now().UTC(), Data: data}
 				if err := ws.WriteJSON(out); err != nil {
 					errCh <- err
 					return
 				}
+			case protocol.TypeAction:
+				var act protocol.Action
+				if err := json.Unmarshal(env.Data, &act); err != nil {
+					continue
+				}
+				res := runAction(act)
+				data, _ := json.Marshal(res)
+				out := protocol.Envelope{V: protocol.V, ID: env.ID, Type: protocol.TypeActionResult, TS: time.Now().UTC(), Data: data}
+				if err := ws.WriteJSON(out); err != nil {
+					errCh <- err
+					return
+				}
 			default:
-				// J3 will handle action / fw_confirm; J1 ignores unknown types.
+				// fw_confirm etc. arrive with J4/J5.
 			}
 		}
 	}()
@@ -176,6 +188,23 @@ func tickerChan(t *time.Ticker) <-chan time.Time {
 		return nil
 	}
 	return t.C
+}
+
+// runAction executes a hub-queued action and builds the terminal report.
+// J3 scope: inventory_refresh / pkg_list (read-only). pkg_update and fw_apply
+// arrive with J4/J5 and must never run from this build.
+func runAction(act protocol.Action) protocol.ActionResult {
+	switch act.Type {
+	case "inventory_refresh", "pkg_list":
+		inv := protocol.Inventory{Packages: linux.Packages(), Updates: linux.Updates()}
+		raw, err := json.Marshal(inv)
+		if err != nil {
+			return protocol.ActionResult{ID: act.ID, Status: "failed", Error: "inventory marshal: " + err.Error()}
+		}
+		return protocol.ActionResult{ID: act.ID, Status: "done", Result: raw}
+	default:
+		return protocol.ActionResult{ID: act.ID, Status: "failed", Error: "unknown action type " + act.Type}
+	}
 }
 
 func sendEnvelope(ws *wsConn, typ string, data any) error {
