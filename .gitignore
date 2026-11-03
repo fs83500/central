@@ -15,3 +15,7 @@ coverage.*
 
 # run-beta.sh local state (CA, site key, TLS certs)
 /data/
+
+# Beta delivery artifacts (archives kept out of git — download from the sandbox)
+*.tar.gz
+*.tar.gz.sha256
