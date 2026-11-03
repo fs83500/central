@@ -1,12 +1,61 @@
 # AVANCEMENT.md — UnifiedGuard.cloud
 
-## Statut : 🎉 Pont de session preview livré (?st=) — login preview opérationnel
+## Statut : ✅ J3 livré — ping applicatif RTT + file d'actions hors-ligne
 
-Dernière mise à jour : 2026-11-02 ~21h15
+Dernière mise à jour : 2026-11-03 ~06h40
 
 ## Tâche en cours
-- **Rien en cours** — correctif livré. Prochaine : J3 (ping applicatif
-  + file d'actions) sur validation de Fabien après recette preview.
+- **Rien en cours** — J3 terminé (commits 3cb8941 + d635509, tests verts).
+  Prochaine : recette J3 par Fabien, puis J4 (pare-feu commit-confirm) / J5 (paquets).
+
+## J3 — Ping applicatif + file d'actions (03/11 matin)
+
+### Livré
+- **Ping applicatif** (SPEC §2.3, jamais ICMP) : le hub envoie `ping` sur le
+  WebSocket OUVERT PAR L'AGENT, mesure le RTT côté hub (pong.ref → waitPong),
+  10 s de timeout, résultat persisté `hosts.rtt_ms` → visible dashboard.
+  Agent hors-ligne → 409 (le hub n'initie JAMAIS de connexion — règle d'or).
+- **File d'actions** (idée n°2 du 02/11) : `actions` + `action_events`
+  (migration 006). L'opérateur empile une action (`inventory_refresh`,
+  `pkg_list` — whitelist J3). Hôte hors-ligne → `pending` ; à la
+  reconnexion le hub livre TOUT le pending sur le socket de l'agent →
+  `delivered` → l'agent exécute et répond `action_result` → `done/failed`.
+  Garde d'ownership : un agent ne peut clore que SES actions.
+- **API** : `POST /api/v1/hosts/{id}/ping`, `POST|GET /api/v1/hosts/{id}/actions`,
+  `GET /api/v1/hosts/{id}/actions` (50 dernières) + jumeaux GET dev
+  (`/dev/hosts/{id}/ping`, `/dev/hosts/{id}/actions`) car le proxy preview
+  ne forward que GET. Tout est audité (N5) : host.ping, action.create.
+- **Agent** : répond `pong{ref}` au ping ; exécute `inventory_refresh`/`pkg_list`
+  (collecteur existant) et renvoie l'inventaire en résultat ; refuse
+  silencieusement les types inconnus (fwd compat J4/J5).
+- **UI** : panneau « Actions distantes » sur la page hôte — bouton Ping
+  (affiche RTT), bouton Rafraîchir l'inventaire (empile l'action, message
+  « livrée à sa reconnexion » si hors-ligne), tableau statut
+  pending/delivered/done/failed + horodatages.
+- **Registre de connexions** (`registry.go`) : map agentID → conn live,
+  writer goroutine par agent (gorilla interdit les writes concurrents),
+  file d'envoi 64, remplacement last-wins à la reconnexion.
+
+### Bug critique trouvé et corrigé en route
+- **WS 500 silencieux derrière le wrapper preview** : `prefixedRedirect`
+  (strip du prefix HUB_UI_PREFIX) n'implémentait pas `http.Hijacker` →
+  gorilla ne pouvait pas hijacker la connexion → 500 sans log. Le hub dev
+  (= toute config avec HUB_UI_PREFIX) n'aurait JAMAIS pu servir un agent.
+  Fix : Hijack + Flush forwardés (cmd/hub/prefixed_redirect.go). Prod
+  (prefix vide) non concernée mais le bug valait pour tous les dev/review.
+
+### Infra sandbox (03/11 matin, après redémarrage)
+- PostgreSQL retrouvé dans `/tmp/pgdata-test`, relancé sur **port 55433**
+  (55432 occupé par le cluster bot) — DSN dev mis à jour dans
+  scripts/hub-dev.sh. Landlock interdit /var/run en écriture → toujours
+  `-c unix_socket_directories=/tmp` au pg_ctl.
+- E2E réel validé : enrollment → agent mTLS WS → ping RTT 0 ms → action
+  empilée agent arrêté → relance agent → livraison auto → done → visible UI.
+
+### Tests
+- 5 nouveaux (`actions_test.go`) : ping offline 409, ping live RTT persisté,
+  file d'actions livrée à la reconnexion (agent réel + TLS réel), ownership,
+  whitelist. Suite complète verte (hub/server, auth, audit, version).
 
 ## Pont de session preview — 02/11 ~21h (retour « après le login : JSON unauthenticated »)
 
@@ -351,7 +400,10 @@ Le proxy preview de la plateforme Bot applique une **CSP stricte** :
       heartbeat 30 s (agent initiateur, règle d'or §2.1), self-hash vérifié par le hub.
 - [x] **J2 — hub MVP + dashboard** (commit 3511b37) : liste hosts, statut en ligne, audit UI,
       tokens enrollment depuis l'UI + install.sh servi par la centrale (décisions SPEC §8 du 02/11).
-- [ ] Puis J3 (ping applicatif + file d'actions), J4 (FW commit-confirm), J5 (paquets),
+- [x] **J3 — ping applicatif + file d'actions** ✅ (03/11 matin, commits 3cb8941 + d635509) :
+      ping RTT hub-side sur WS agent (jamais ICMP), actions pending livrées à la reconnexion,
+      whitelist inventory_refresh/pkg_list, UI « Actions distantes », fix Hijacker preview.
+- [ ] Puis J4 (FW commit-confirm), J5 (paquets),
       J6 (maintenance), J7 (fleet), J8 (Windows), J9 (MFA forte/SSO), J10 (compose+Caddy).
 - [ ] Questions SPEC.md §13 restantes (non bloquantes pour J1/J2) : 1) stack frontend
       (proposition : HTML/JS sans build lourd), 4) périmètre agent Windows (winget seul ?).
